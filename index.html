@@ -1,0 +1,2677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Robot Simulation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0a0a12;
+      color: #ffffff;
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    /* Header */
+    .header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 56px;
+      background: rgba(10, 10, 18, 0.9);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      z-index: 100;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 600;
+      font-size: 18px;
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #4a9eff, #00d4ff);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .status-indicators {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .status-dot {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .status-dot::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 8px #22c55e;
+    }
+
+    .status-dot.warning::before {
+      background: #eab308;
+      box-shadow: 0 0 8px #eab308;
+    }
+
+    .status-dot.offline::before {
+      background: #ef4444;
+      box-shadow: 0 0 8px #ef4444;
+    }
+
+    /* Main Layout */
+    .main-container {
+      display: flex;
+      height: 100vh;
+      padding-top: 56px;
+    }
+
+    /* Left Panel - Voice Controls */
+    .left-panel {
+      width: 280px;
+      background: rgba(20, 20, 30, 0.8);
+      border-right: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .panel-section {
+      background: rgba(30, 30, 45, 0.6);
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    .panel-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: rgba(255, 255, 255, 0.5);
+      margin-bottom: 12px;
+    }
+
+    /* 3D Scene Container */
+    .scene-container {
+      flex: 1;
+      position: relative;
+    }
+
+    #canvas-container {
+      width: 100%;
+      height: 100%;
+    }
+
+    #canvas-container canvas {
+      display: block;
+    }
+
+    /* Right Panel - Camera Feed */
+    .right-panel {
+      width: 320px;
+      background: rgba(20, 20, 30, 0.8);
+      border-left: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .camera-feed {
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      aspect-ratio: 16/9;
+      position: relative;
+      border: 2px solid rgba(74, 158, 255, 0.3);
+    }
+
+    .camera-feed::before {
+      content: 'ROBOT POV';
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      font-size: 10px;
+      font-weight: 600;
+      color: #4a9eff;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 4px 8px;
+      border-radius: 4px;
+      z-index: 10;
+    }
+
+    .camera-feed::after {
+      content: '● REC';
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      font-size: 10px;
+      font-weight: 600;
+      color: #ef4444;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 4px 8px;
+      border-radius: 4px;
+      z-index: 10;
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0.3; }
+    }
+
+    #robot-pov-canvas {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .robot-response {
+      background: rgba(30, 30, 45, 0.6);
+      border-radius: 12px;
+      padding: 16px;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .response-text {
+      font-size: 14px;
+      line-height: 1.6;
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    /* Bottom Controls */
+    .bottom-controls {
+      position: fixed;
+      bottom: 0;
+      left: 280px;
+      right: 320px;
+      height: 120px;
+      background: rgba(20, 20, 30, 0.95);
+      backdrop-filter: blur(10px);
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 40px;
+      padding: 0 40px;
+    }
+
+    /* Movement Pad */
+    .movement-pad {
+      display: grid;
+      grid-template-columns: repeat(3, 48px);
+      grid-template-rows: repeat(3, 48px);
+      gap: 4px;
+    }
+
+    .move-btn {
+      width: 48px;
+      height: 48px;
+      border: none;
+      border-radius: 8px;
+      background: rgba(74, 158, 255, 0.2);
+      color: #4a9eff;
+      font-size: 20px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+
+    .move-btn:hover {
+      background: rgba(74, 158, 255, 0.3);
+    }
+
+    .move-btn:active, .move-btn.active {
+      background: rgba(74, 158, 255, 0.5);
+      transform: scale(0.95);
+    }
+
+    .move-btn.empty {
+      background: transparent;
+      pointer-events: none;
+    }
+
+    /* Expression Buttons */
+    .expression-controls {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 6px;
+    }
+
+    .expr-btn {
+      width: 40px;
+      height: 40px;
+      border: none;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.1);
+      font-size: 20px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .expr-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+      transform: translateY(-2px);
+    }
+
+    .expr-btn.active {
+      background: rgba(74, 158, 255, 0.3);
+      box-shadow: 0 0 12px rgba(74, 158, 255, 0.4);
+    }
+
+    /* Color Buttons */
+    .color-controls {
+      display: flex;
+      gap: 8px;
+    }
+
+    .color-btn {
+      width: 32px;
+      height: 32px;
+      border: 2px solid transparent;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .color-btn:hover {
+      transform: scale(1.1);
+    }
+
+    .color-btn.active {
+      border-color: #fff;
+      box-shadow: 0 0 12px currentColor;
+    }
+
+    .color-btn.green { background: #00ff88; }
+    .color-btn.blue { background: #00d4ff; }
+    .color-btn.red { background: #ff4444; }
+    .color-btn.yellow { background: #ffdd00; }
+    .color-btn.purple { background: #aa44ff; }
+
+    /* Body Color Buttons */
+    .body-color-controls {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+
+    .body-color-btn {
+      width: 32px;
+      height: 32px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .body-color-btn:hover {
+      transform: scale(1.1);
+      border-color: rgba(255, 255, 255, 0.5);
+    }
+
+    .body-color-btn.active {
+      border-color: #fff;
+      box-shadow: 0 0 12px rgba(255, 255, 255, 0.5);
+    }
+
+    /* Speed Indicator */
+    .speed-indicator {
+      min-width: 100px;
+    }
+
+    .speed-gauge {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .speed-bar-bg {
+      width: 80px;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .speed-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #00ff88, #00d4ff);
+      border-radius: 4px;
+      transition: width 0.1s ease;
+    }
+
+    .speed-bar-fill.fast {
+      background: linear-gradient(90deg, #ffdd00, #ff8844);
+    }
+
+    .speed-value {
+      font-size: 14px;
+      font-weight: 600;
+      color: #00d4ff;
+      min-width: 36px;
+      text-align: right;
+    }
+
+    .robot-status-indicators {
+      margin-top: 8px;
+    }
+
+    .status-item {
+      display: flex;
+      gap: 6px;
+      font-size: 11px;
+    }
+
+    .status-label {
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    .status-value {
+      color: #00ff88;
+      font-weight: 500;
+    }
+
+    .status-value.moving {
+      color: #00d4ff;
+    }
+
+    .status-value.turning {
+      color: #ffdd00;
+    }
+
+    /* Quick Commands */
+    .quick-commands {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .quick-btn {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 8px;
+      background: rgba(74, 158, 255, 0.15);
+      color: #4a9eff;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.15s ease;
+    }
+
+    .quick-btn:hover {
+      background: rgba(74, 158, 255, 0.25);
+    }
+
+    /* Phase indicator */
+    .phase-badge {
+      position: fixed;
+      bottom: 140px;
+      right: 340px;
+      background: rgba(74, 158, 255, 0.2);
+      color: #4a9eff;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      z-index: 100;
+    }
+
+    /* Loading overlay */
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      background: #0a0a12;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 20px;
+      z-index: 1000;
+      transition: opacity 0.5s ease;
+    }
+
+    .loading-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .loading-spinner {
+      width: 48px;
+      height: 48px;
+      border: 3px solid rgba(74, 158, 255, 0.2);
+      border-top-color: #4a9eff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" id="loading">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">Initializing Robot Systems...</div>
+  </div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="logo">
+      <div class="logo-icon">🤖</div>
+      <span>AI Robot Control</span>
+    </div>
+    <div class="status-indicators">
+      <div class="status-dot">Scene Ready</div>
+      <div class="status-dot warning" id="robot-status">Robot Pending</div>
+      <div class="status-dot offline" id="camera-status">Camera Pending</div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <div class="main-container">
+    <!-- Left Panel -->
+    <aside class="left-panel">
+      <div class="panel-section">
+        <div class="panel-title">Voice Control</div>
+        <button class="quick-btn" style="width: 100%; text-align: center;">
+          🎤 Start Listening
+        </button>
+        <p style="font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 8px; text-align: center;">
+          Coming in Phase 2
+        </p>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-title">Quick Commands</div>
+        <div class="quick-commands">
+          <button class="quick-btn">👋 Wave Hello</button>
+          <button class="quick-btn">🔄 Spin Around</button>
+          <button class="quick-btn">📷 Take Photo</button>
+          <button class="quick-btn">💬 Say Hello</button>
+        </div>
+      </div>
+
+      <div class="panel-section" style="margin-top: auto;">
+        <div class="panel-title">Keyboard Controls</div>
+        <div style="font-size: 12px; color: rgba(255,255,255,0.5); line-height: 1.8;">
+          <div><kbd style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">W</kbd> Forward</div>
+          <div><kbd style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">S</kbd> Backward</div>
+          <div><kbd style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">A</kbd> Turn Left</div>
+          <div><kbd style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">D</kbd> Turn Right</div>
+          <div><kbd style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">Q</kbd> Head Left</div>
+          <div><kbd style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">E</kbd> Head Right</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 3D Scene -->
+    <div class="scene-container">
+      <div id="canvas-container"></div>
+    </div>
+
+    <!-- Right Panel -->
+    <aside class="right-panel">
+      <div class="panel-section">
+        <div class="panel-title">Robot Camera</div>
+        <div class="camera-feed">
+          <canvas id="robot-pov-canvas" width="640" height="360"></canvas>
+        </div>
+      </div>
+
+      <div class="robot-response">
+        <div class="panel-title">Robot Response</div>
+        <div class="response-text" id="robot-response-text">
+          Robot systems online!<br><br>
+          <span style="color: #00ffff;">Phase 1 Complete!</span><br>
+          All systems operational ✓<br><br>
+          <span style="color: rgba(255,255,255,0.5);">Try the Quick Commands on the left panel!</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Bottom Controls -->
+  <div class="bottom-controls">
+    <!-- Movement Pad -->
+    <div>
+      <div class="panel-title" style="text-align: center; margin-bottom: 8px;">Movement</div>
+      <div class="movement-pad">
+        <div class="move-btn empty"></div>
+        <button class="move-btn" id="btn-forward">↑</button>
+        <div class="move-btn empty"></div>
+        <button class="move-btn" id="btn-left">←</button>
+        <div class="move-btn empty"></div>
+        <button class="move-btn" id="btn-right">→</button>
+        <div class="move-btn empty"></div>
+        <button class="move-btn" id="btn-backward">↓</button>
+        <div class="move-btn empty"></div>
+      </div>
+    </div>
+
+    <!-- Head Controls -->
+    <div>
+      <div class="panel-title" style="text-align: center; margin-bottom: 8px;">Head</div>
+      <div style="display: flex; gap: 8px;">
+        <button class="move-btn" id="btn-head-left">↺</button>
+        <button class="move-btn" id="btn-head-right">↻</button>
+      </div>
+    </div>
+
+    <!-- Expression Buttons -->
+    <div>
+      <div class="panel-title" style="text-align: center; margin-bottom: 8px;">Expression</div>
+      <div class="expression-controls">
+        <button class="expr-btn active" data-expr="neutral" title="Neutral">😐</button>
+        <button class="expr-btn" data-expr="happy" title="Happy">😊</button>
+        <button class="expr-btn" data-expr="thinking" title="Thinking">🤔</button>
+        <button class="expr-btn" data-expr="surprised" title="Surprised">😮</button>
+        <button class="expr-btn" data-expr="love" title="Love">😍</button>
+        <button class="expr-btn" data-expr="loading" title="Loading">⏳</button>
+        <button class="expr-btn" data-expr="sad" title="Sad">😢</button>
+        <button class="expr-btn" data-expr="angry" title="Angry">😠</button>
+        <button class="expr-btn" data-expr="wink" title="Wink">😉</button>
+        <button class="expr-btn" data-expr="excited" title="Excited">🤩</button>
+        <button class="expr-btn" data-expr="sleepy" title="Sleepy">😴</button>
+        <button class="expr-btn" data-expr="confused" title="Confused">😕</button>
+      </div>
+    </div>
+
+    <!-- Color Buttons -->
+    <div>
+      <div class="panel-title" style="text-align: center; margin-bottom: 8px;">LCD Color</div>
+      <div class="color-controls">
+        <button class="color-btn green active" data-color="#00ff88"></button>
+        <button class="color-btn blue" data-color="#00d4ff"></button>
+        <button class="color-btn red" data-color="#ff4444"></button>
+        <button class="color-btn yellow" data-color="#ffdd00"></button>
+        <button class="color-btn purple" data-color="#aa44ff"></button>
+      </div>
+    </div>
+
+    <!-- Body Color -->
+    <div>
+      <div class="panel-title" style="text-align: center; margin-bottom: 8px;">Body Color</div>
+      <div class="body-color-controls">
+        <button class="body-color-btn active" data-body-color="#fafaf5" title="White" style="background: #fafaf5;"></button>
+        <button class="body-color-btn" data-body-color="#2a2a2a" title="Black" style="background: #2a2a2a;"></button>
+        <button class="body-color-btn" data-body-color="#e63946" title="Red" style="background: #e63946;"></button>
+        <button class="body-color-btn" data-body-color="#457b9d" title="Blue" style="background: #457b9d;"></button>
+        <button class="body-color-btn" data-body-color="#2d6a4f" title="Green" style="background: #2d6a4f;"></button>
+        <button class="body-color-btn" data-body-color="#f4a261" title="Orange" style="background: #f4a261;"></button>
+        <button class="body-color-btn" data-body-color="#9d4edd" title="Purple" style="background: #9d4edd;"></button>
+        <button class="body-color-btn" data-body-color="#ffd700" title="Gold" style="background: #ffd700;"></button>
+      </div>
+    </div>
+
+    <!-- Speed Indicator -->
+    <div class="speed-indicator">
+      <div class="panel-title" style="text-align: center; margin-bottom: 8px;">Speed</div>
+      <div class="speed-gauge">
+        <div class="speed-bar-bg">
+          <div class="speed-bar-fill" id="speed-bar"></div>
+        </div>
+        <div class="speed-value" id="speed-value">0%</div>
+      </div>
+      <div class="robot-status-indicators">
+        <div class="status-item">
+          <span class="status-label">State:</span>
+          <span class="status-value" id="robot-state">Idle</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase Badge -->
+  <div class="phase-badge">PHASE 1: Visual Polish ✓</div>
+
+  <!-- Three.js via Import Map -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // =====================================================
+    // PHASE 1A: Scene Setup
+    // =====================================================
+
+    // Scene configuration with realistic studio lighting feel
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a24);
+    scene.fog = new THREE.Fog(0x1a1a24, 12, 40);
+
+    // Main camera (user view)
+    const camera = new THREE.PerspectiveCamera(
+      50,
+      (window.innerWidth - 600) / (window.innerHeight - 176),
+      0.1,
+      100
+    );
+    camera.position.set(5, 4, 8);
+    camera.lookAt(0, 1, 0);
+
+    // Renderer with shadows
+    const container = document.getElementById('canvas-container');
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    container.appendChild(renderer.domElement);
+
+    // Orbit Controls
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.minDistance = 3;
+    controls.maxDistance = 20;
+    controls.maxPolarAngle = Math.PI / 2 + 0.1;
+    controls.target.set(0, 1, 0);
+
+    // =====================================================
+    // LIGHTING SETUP (Realistic Studio Lighting)
+    // =====================================================
+
+    // Ambient light - soft fill
+    const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambient);
+
+    // Hemisphere light for sky/ground ambient (subtle)
+    const hemiLight = new THREE.HemisphereLight(0xddeeff, 0x303030, 0.4);
+    scene.add(hemiLight);
+
+    // Main directional light (key light) with shadows
+    const sun = new THREE.DirectionalLight(0xfff8f0, 1.0);
+    sun.position.set(5, 12, 5);
+    sun.castShadow = true;
+    sun.shadow.mapSize.width = 2048;
+    sun.shadow.mapSize.height = 2048;
+    sun.shadow.camera.near = 0.5;
+    sun.shadow.camera.far = 50;
+    sun.shadow.camera.left = -15;
+    sun.shadow.camera.right = 15;
+    sun.shadow.camera.top = 15;
+    sun.shadow.camera.bottom = -15;
+    sun.shadow.bias = -0.0001;
+    scene.add(sun);
+
+    // Fill light (softer, from opposite side)
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+    fillLight.position.set(-6, 8, -3);
+    scene.add(fillLight);
+
+    // Rim/back light for depth
+    const rimLight = new THREE.DirectionalLight(0xccddff, 0.3);
+    rimLight.position.set(0, 5, -8);
+    scene.add(rimLight);
+
+    // Subtle accent lights for visual interest
+    const blueLight = new THREE.PointLight(0x6699ff, 0.3, 15);
+    blueLight.position.set(-4, 3, -2);
+    scene.add(blueLight);
+
+    const warmLight = new THREE.PointLight(0xffaa66, 0.2, 15);
+    warmLight.position.set(4, 2, 4);
+    scene.add(warmLight);
+
+    // =====================================================
+    // WAREHOUSE/LAB ENVIRONMENT
+    // =====================================================
+
+    // Track collidable objects for collision detection
+    const collidableObjects = [];
+
+    // --- MATERIALS ---
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: 0x3a3a45,
+      roughness: 0.7,
+      metalness: 0.1
+    });
+
+    const wallMat = new THREE.MeshStandardMaterial({
+      color: 0x4a4a55,
+      roughness: 0.8,
+      metalness: 0.05
+    });
+
+    const metalMat = new THREE.MeshStandardMaterial({
+      color: 0x666677,
+      roughness: 0.4,
+      metalness: 0.7
+    });
+
+    const crateMat = new THREE.MeshStandardMaterial({
+      color: 0x8b7355,
+      roughness: 0.9,
+      metalness: 0.0
+    });
+
+    const plasticWhiteMat = new THREE.MeshStandardMaterial({
+      color: 0xf0f0e8,
+      roughness: 0.4,
+      metalness: 0.05
+    });
+
+    const plasticBlueMat = new THREE.MeshStandardMaterial({
+      color: 0x4a7fbf,
+      roughness: 0.5,
+      metalness: 0.1
+    });
+
+    const plasticOrangeMat = new THREE.MeshStandardMaterial({
+      color: 0xe87a3d,
+      roughness: 0.5,
+      metalness: 0.1
+    });
+
+    const glowGreenMat = new THREE.MeshBasicMaterial({ color: 0x00ff88 });
+    const glowBlueMat = new THREE.MeshBasicMaterial({ color: 0x00aaff });
+
+    // --- FLOOR ---
+    const groundGeo = new THREE.PlaneGeometry(20, 20);
+    const ground = new THREE.Mesh(groundGeo, floorMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.01;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // Floor grid lines (warehouse marking)
+    const gridHelper = new THREE.GridHelper(20, 20, 0x4a9eff, 0x333344);
+    gridHelper.material.opacity = 0.2;
+    gridHelper.material.transparent = true;
+    scene.add(gridHelper);
+
+    // Safety floor markings
+    const createFloorStripe = (x, z, width, depth, color) => {
+      const geo = new THREE.PlaneGeometry(width, depth);
+      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6 });
+      const stripe = new THREE.Mesh(geo, mat);
+      stripe.rotation.x = -Math.PI / 2;
+      stripe.position.set(x, 0.01, z);
+      return stripe;
+    };
+
+    // Yellow safety zone around robot start
+    for (let i = 0; i < 4; i++) {
+      const angle = (i / 4) * Math.PI * 2;
+      scene.add(createFloorStripe(
+        Math.cos(angle) * 1.5,
+        Math.sin(angle) * 1.5,
+        0.1, 0.8, 0xffaa00
+      ));
+    }
+
+    // --- WALLS (3 sides, open front) ---
+    const createWall = (x, z, width, height, depth, rotY = 0) => {
+      const geo = new THREE.BoxGeometry(width, height, depth);
+      const wall = new THREE.Mesh(geo, wallMat);
+      wall.position.set(x, height / 2, z);
+      wall.rotation.y = rotY;
+      wall.castShadow = true;
+      wall.receiveShadow = true;
+      return wall;
+    };
+
+    // Back wall
+    const backWall = createWall(0, -9, 20, 4, 0.3);
+    scene.add(backWall);
+    collidableObjects.push({ mesh: backWall, type: 'wall' });
+
+    // Left wall
+    const leftWall = createWall(-9.85, -4, 0.3, 4, 10);
+    scene.add(leftWall);
+    collidableObjects.push({ mesh: leftWall, type: 'wall' });
+
+    // Right wall
+    const rightWall = createWall(9.85, -4, 0.3, 4, 10);
+    scene.add(rightWall);
+    collidableObjects.push({ mesh: rightWall, type: 'wall' });
+
+    // --- SHELVING UNITS ---
+    const createShelf = (x, z, rotY = 0) => {
+      const group = new THREE.Group();
+
+      // Shelf frame (metal)
+      const postGeo = new THREE.BoxGeometry(0.1, 2.5, 0.1);
+      const shelfGeo = new THREE.BoxGeometry(2, 0.05, 0.8);
+
+      // 4 posts
+      const positions = [[-0.9, 0, -0.35], [0.9, 0, -0.35], [-0.9, 0, 0.35], [0.9, 0, 0.35]];
+      positions.forEach(([px, py, pz]) => {
+        const post = new THREE.Mesh(postGeo, metalMat);
+        post.position.set(px, 1.25, pz);
+        post.castShadow = true;
+        group.add(post);
+      });
+
+      // 3 shelf levels
+      [0.5, 1.3, 2.1].forEach(y => {
+        const shelf = new THREE.Mesh(shelfGeo, metalMat);
+        shelf.position.set(0, y, 0);
+        shelf.castShadow = true;
+        shelf.receiveShadow = true;
+        group.add(shelf);
+      });
+
+      // Items on shelves
+      const boxGeo = new THREE.BoxGeometry(0.4, 0.3, 0.3);
+      const smallBoxGeo = new THREE.BoxGeometry(0.25, 0.2, 0.25);
+
+      // Bottom shelf items
+      const box1 = new THREE.Mesh(boxGeo, plasticBlueMat);
+      box1.position.set(-0.5, 0.7, 0);
+      box1.castShadow = true;
+      group.add(box1);
+
+      const box2 = new THREE.Mesh(boxGeo, plasticOrangeMat);
+      box2.position.set(0.3, 0.7, 0);
+      box2.castShadow = true;
+      group.add(box2);
+
+      // Middle shelf items
+      const box3 = new THREE.Mesh(smallBoxGeo, plasticWhiteMat);
+      box3.position.set(-0.6, 1.5, 0);
+      box3.castShadow = true;
+      group.add(box3);
+
+      const box4 = new THREE.Mesh(smallBoxGeo, plasticWhiteMat);
+      box4.position.set(-0.3, 1.5, 0);
+      box4.castShadow = true;
+      group.add(box4);
+
+      const box5 = new THREE.Mesh(boxGeo, plasticBlueMat);
+      box5.position.set(0.4, 1.5, 0);
+      box5.castShadow = true;
+      group.add(box5);
+
+      group.position.set(x, 0, z);
+      group.rotation.y = rotY;
+      return group;
+    };
+
+    // Add shelving units along back wall
+    const shelf1 = createShelf(-6, -8);
+    scene.add(shelf1);
+    collidableObjects.push({ mesh: shelf1, type: 'shelf', radius: 1.2, x: -6, z: -8 });
+
+    const shelf2 = createShelf(-2, -8);
+    scene.add(shelf2);
+    collidableObjects.push({ mesh: shelf2, type: 'shelf', radius: 1.2, x: -2, z: -8 });
+
+    const shelf3 = createShelf(2, -8);
+    scene.add(shelf3);
+    collidableObjects.push({ mesh: shelf3, type: 'shelf', radius: 1.2, x: 2, z: -8 });
+
+    const shelf4 = createShelf(6, -8);
+    scene.add(shelf4);
+    collidableObjects.push({ mesh: shelf4, type: 'shelf', radius: 1.2, x: 6, z: -8 });
+
+    // --- WORK STATION / TABLE ---
+    const createWorkStation = (x, z) => {
+      const group = new THREE.Group();
+
+      // Table top
+      const tableGeo = new THREE.BoxGeometry(2, 0.1, 1);
+      const table = new THREE.Mesh(tableGeo, plasticWhiteMat);
+      table.position.y = 0.9;
+      table.castShadow = true;
+      table.receiveShadow = true;
+      group.add(table);
+
+      // Table legs
+      const legGeo = new THREE.BoxGeometry(0.1, 0.9, 0.1);
+      [[-0.9, -0.4], [0.9, -0.4], [-0.9, 0.4], [0.9, 0.4]].forEach(([lx, lz]) => {
+        const leg = new THREE.Mesh(legGeo, metalMat);
+        leg.position.set(lx, 0.45, lz);
+        leg.castShadow = true;
+        group.add(leg);
+      });
+
+      // Items on table
+      const monitorGeo = new THREE.BoxGeometry(0.6, 0.4, 0.05);
+      const monitor = new THREE.Mesh(monitorGeo, new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.3 }));
+      monitor.position.set(-0.5, 1.2, -0.2);
+      monitor.castShadow = true;
+      group.add(monitor);
+
+      // Monitor screen glow
+      const screenGeo = new THREE.PlaneGeometry(0.5, 0.3);
+      const screen = new THREE.Mesh(screenGeo, glowBlueMat);
+      screen.position.set(-0.5, 1.2, -0.17);
+      group.add(screen);
+
+      // Small device on table
+      const deviceGeo = new THREE.BoxGeometry(0.2, 0.1, 0.15);
+      const device = new THREE.Mesh(deviceGeo, plasticWhiteMat);
+      device.position.set(0.5, 1.0, 0);
+      device.castShadow = true;
+      group.add(device);
+
+      // Device LED
+      const ledGeo = new THREE.SphereGeometry(0.02, 8, 8);
+      const led = new THREE.Mesh(ledGeo, glowGreenMat);
+      led.position.set(0.55, 1.05, 0.05);
+      group.add(led);
+
+      group.position.set(x, 0, z);
+      return group;
+    };
+
+    const workStation = createWorkStation(-7, -3);
+    scene.add(workStation);
+    collidableObjects.push({ mesh: workStation, type: 'table', radius: 1.3, x: -7, z: -3 });
+
+    // --- CRATES AND BARRELS ---
+    const createCrate = (x, z, size = 1) => {
+      const geo = new THREE.BoxGeometry(0.8 * size, 0.6 * size, 0.8 * size);
+      const crate = new THREE.Mesh(geo, crateMat);
+      crate.position.set(x, 0.3 * size, z);
+      crate.castShadow = true;
+      crate.receiveShadow = true;
+      return crate;
+    };
+
+    const createBarrel = (x, z) => {
+      const geo = new THREE.CylinderGeometry(0.3, 0.35, 0.9, 16);
+      const barrel = new THREE.Mesh(geo, plasticBlueMat);
+      barrel.position.set(x, 0.45, z);
+      barrel.castShadow = true;
+      barrel.receiveShadow = true;
+      return barrel;
+    };
+
+    // Crate stack in corner
+    const crate1 = createCrate(7, -6);
+    scene.add(crate1);
+    collidableObjects.push({ mesh: crate1, type: 'box', radius: 0.6, x: 7, z: -6 });
+
+    const crate2 = createCrate(7.8, -6);
+    scene.add(crate2);
+    collidableObjects.push({ mesh: crate2, type: 'box', radius: 0.6, x: 7.8, z: -6 });
+
+    const crate3 = createCrate(7.4, -6, 0.8);
+    crate3.position.y = 0.6 + 0.24;
+    scene.add(crate3);
+
+    // Barrels
+    const barrel1 = createBarrel(-8, 2);
+    scene.add(barrel1);
+    collidableObjects.push({ mesh: barrel1, type: 'barrel', radius: 0.5, x: -8, z: 2 });
+
+    const barrel2 = createBarrel(-8.6, 2.5);
+    scene.add(barrel2);
+    collidableObjects.push({ mesh: barrel2, type: 'barrel', radius: 0.5, x: -8.6, z: 2.5 });
+
+    // --- CHARGING STATION ---
+    const createChargingStation = (x, z) => {
+      const group = new THREE.Group();
+
+      // Base platform
+      const baseGeo = new THREE.CylinderGeometry(0.6, 0.7, 0.1, 24);
+      const base = new THREE.Mesh(baseGeo, metalMat);
+      base.position.y = 0.05;
+      base.receiveShadow = true;
+      group.add(base);
+
+      // Charging pad (glowing ring)
+      const ringGeo = new THREE.TorusGeometry(0.45, 0.03, 8, 32);
+      const ring = new THREE.Mesh(ringGeo, glowGreenMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.11;
+      group.add(ring);
+
+      // Center indicator
+      const centerGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.02, 16);
+      const center = new THREE.Mesh(centerGeo, glowGreenMat);
+      center.position.y = 0.11;
+      group.add(center);
+
+      // Back post with screen
+      const postGeo = new THREE.BoxGeometry(0.15, 1.2, 0.1);
+      const post = new THREE.Mesh(postGeo, metalMat);
+      post.position.set(0, 0.6, -0.5);
+      post.castShadow = true;
+      group.add(post);
+
+      // Screen
+      const screenGeo2 = new THREE.PlaneGeometry(0.3, 0.2);
+      const screenMat = new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.8 });
+      const screen2 = new THREE.Mesh(screenGeo2, screenMat);
+      screen2.position.set(0, 0.9, -0.44);
+      group.add(screen2);
+
+      group.position.set(x, 0, z);
+      return group;
+    };
+
+    const chargingStation = createChargingStation(5, 4);
+    scene.add(chargingStation);
+    collidableObjects.push({ mesh: chargingStation, type: 'station', radius: 0.8, x: 5, z: 4 });
+
+    // --- FLOOR OBSTACLES (smaller items) ---
+    const createCone = (x, z) => {
+      const geo = new THREE.ConeGeometry(0.2, 0.5, 8);
+      const cone = new THREE.Mesh(geo, plasticOrangeMat);
+      cone.position.set(x, 0.25, z);
+      cone.castShadow = true;
+      return cone;
+    };
+
+    // Safety cones
+    scene.add(createCone(3, 2));
+    collidableObjects.push({ type: 'cone', radius: 0.3, x: 3, z: 2 });
+    scene.add(createCone(3.5, 1.5));
+    collidableObjects.push({ type: 'cone', radius: 0.3, x: 3.5, z: 1.5 });
+
+    // --- AMBIENT DETAILS ---
+    // Ceiling lights (emissive strips)
+    const createCeilingLight = (x, z) => {
+      const geo = new THREE.BoxGeometry(2, 0.1, 0.3);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xffffee });
+      const light = new THREE.Mesh(geo, mat);
+      light.position.set(x, 3.9, z);
+      return light;
+    };
+
+    scene.add(createCeilingLight(-4, -4));
+    scene.add(createCeilingLight(4, -4));
+    scene.add(createCeilingLight(0, 2));
+
+    // Add point lights for ceiling
+    const ceilingLight1 = new THREE.PointLight(0xffffee, 0.3, 10);
+    ceilingLight1.position.set(-4, 3.5, -4);
+    scene.add(ceilingLight1);
+
+    const ceilingLight2 = new THREE.PointLight(0xffffee, 0.3, 10);
+    ceilingLight2.position.set(4, 3.5, -4);
+    scene.add(ceilingLight2);
+
+    // =====================================================
+    // ROBOT CONSTRUCTION (Phase 1B - Matching Reference)
+    // =====================================================
+
+    const robot = new THREE.Group();
+    const headGroup = new THREE.Group(); // For head rotation
+
+    // --- MATERIALS ---
+    // White/cream body material (realistic plastic)
+    const whiteMat = new THREE.MeshStandardMaterial({
+      color: 0xfafaf5,
+      roughness: 0.35,
+      metalness: 0.0,
+      envMapIntensity: 0.5
+    });
+
+    // Darker white for accents (matte plastic)
+    const lightGrayMat = new THREE.MeshStandardMaterial({
+      color: 0xf0f0e8,
+      roughness: 0.45,
+      metalness: 0.0,
+      envMapIntensity: 0.3
+    });
+
+    // Metallic silver for neck
+    const silverMat = new THREE.MeshStandardMaterial({
+      color: 0xaaaaaa,
+      roughness: 0.3,
+      metalness: 0.8
+    });
+
+    // Dark screen material
+    const screenMat = new THREE.MeshStandardMaterial({
+      color: 0x1a1a2e,
+      roughness: 0.1,
+      metalness: 0.3
+    });
+
+    // Rubber tire material
+    const rubberMat = new THREE.MeshStandardMaterial({
+      color: 0x2a2a2a,
+      roughness: 0.9,
+      metalness: 0.0
+    });
+
+    // Chrome/shiny metal for wheel hubs
+    const chromeMat = new THREE.MeshStandardMaterial({
+      color: 0x888888,
+      roughness: 0.2,
+      metalness: 0.9
+    });
+
+    // --- HELPER: Create rounded box ---
+    function createRoundedBox(width, height, depth, radius, smoothness) {
+      const shape = new THREE.Shape();
+      const eps = 0.00001;
+      const r = radius - eps;
+      const w = width / 2 - r;
+      const h = height / 2 - r;
+
+      shape.moveTo(-w, -h - r);
+      shape.lineTo(-w, h);
+      shape.absarc(-w, h, r, Math.PI, Math.PI / 2, true);
+      shape.lineTo(w, h + r);
+      shape.absarc(w, h, r, Math.PI / 2, 0, true);
+      shape.lineTo(w + r, -h);
+      shape.absarc(w, -h, r, 0, -Math.PI / 2, true);
+      shape.lineTo(-w, -h - r);
+      shape.absarc(-w, -h, r, -Math.PI / 2, -Math.PI, true);
+
+      const extrudeSettings = {
+        depth: depth - radius * 2,
+        bevelEnabled: true,
+        bevelSegments: smoothness,
+        steps: 1,
+        bevelSize: radius,
+        bevelThickness: radius
+      };
+
+      const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+      geometry.center();
+      return geometry;
+    }
+
+    // --- BODY ---
+    const bodyWidth = 1.0;
+    const bodyHeight = 0.9;
+    const bodyDepth = 0.8;
+    const bodyGeo = createRoundedBox(bodyWidth, bodyHeight, bodyDepth, 0.15, 4);
+    const body = new THREE.Mesh(bodyGeo, whiteMat);
+    body.position.y = 0.7;
+    body.castShadow = true;
+    body.receiveShadow = true;
+    robot.add(body);
+
+    // Body panel detail (front)
+    const panelGeo = createRoundedBox(0.5, 0.4, 0.05, 0.05, 2);
+    const panel = new THREE.Mesh(panelGeo, lightGrayMat);
+    panel.position.set(0, 0.75, bodyDepth / 2 + 0.02);
+    panel.castShadow = true;
+    robot.add(panel);
+
+    // Small decorative dots on body
+    const dotGeo = new THREE.SphereGeometry(0.03, 12, 12);
+    const dot1 = new THREE.Mesh(dotGeo, silverMat);
+    dot1.position.set(-0.2, 0.5, bodyDepth / 2 + 0.02);
+    robot.add(dot1);
+    const dot2 = new THREE.Mesh(dotGeo, silverMat);
+    dot2.position.set(0.2, 0.5, bodyDepth / 2 + 0.02);
+    robot.add(dot2);
+
+    // --- NECK ---
+    const neckGeo = new THREE.CylinderGeometry(0.15, 0.18, 0.15, 16);
+    const neck = new THREE.Mesh(neckGeo, silverMat);
+    neck.position.y = 1.25;
+    neck.castShadow = true;
+    robot.add(neck);
+
+    // Neck ring detail
+    const neckRingGeo = new THREE.TorusGeometry(0.17, 0.02, 8, 24);
+    const neckRing = new THREE.Mesh(neckRingGeo, chromeMat);
+    neckRing.rotation.x = Math.PI / 2;
+    neckRing.position.y = 1.2;
+    robot.add(neckRing);
+
+    // --- HEAD GROUP (rotatable) ---
+    headGroup.position.y = 1.55;
+    robot.add(headGroup);
+
+    // Head outer shell (white frame)
+    const headWidth = 1.1;
+    const headHeight = 0.7;
+    const headDepth = 0.6;
+    const headGeo = createRoundedBox(headWidth, headHeight, headDepth, 0.12, 4);
+    const headShell = new THREE.Mesh(headGeo, whiteMat);
+    headShell.castShadow = true;
+    headShell.receiveShadow = true;
+    headGroup.add(headShell);
+
+    // LCD Screen (dark inset)
+    const screenWidth = 0.9;
+    const screenHeight = 0.5;
+    const screenGeo = createRoundedBox(screenWidth, screenHeight, 0.08, 0.08, 3);
+    const screen = new THREE.Mesh(screenGeo, screenMat);
+    screen.position.z = headDepth / 2 - 0.02;
+    headGroup.add(screen);
+
+    // --- LCD FACE (Canvas Texture) ---
+    const faceCanvas = document.createElement('canvas');
+    faceCanvas.width = 256;
+    faceCanvas.height = 160;
+    const faceCtx = faceCanvas.getContext('2d');
+
+    const faceTexture = new THREE.CanvasTexture(faceCanvas);
+    faceTexture.minFilter = THREE.LinearFilter;
+    faceTexture.magFilter = THREE.LinearFilter;
+
+    const faceMat = new THREE.MeshBasicMaterial({
+      map: faceTexture,
+      transparent: true
+    });
+
+    const faceDisplayGeo = new THREE.PlaneGeometry(screenWidth - 0.05, screenHeight - 0.05);
+    const faceDisplay = new THREE.Mesh(faceDisplayGeo, faceMat);
+    faceDisplay.position.z = headDepth / 2 + 0.045; // Slightly in front of screen to avoid z-fighting
+    faceDisplay.renderOrder = 1; // Ensure face renders on top
+    headGroup.add(faceDisplay);
+
+    // LCD Glow Light (illuminates face and nearby surfaces)
+    const lcdGlowLight = new THREE.PointLight(0x00ffff, 0.6, 3, 2);
+    lcdGlowLight.position.set(0, 0, headDepth / 2 + 0.3);
+    headGroup.add(lcdGlowLight);
+
+    // Secondary softer glow for ambient effect
+    const lcdAmbientGlow = new THREE.PointLight(0x00ffff, 0.2, 5, 2);
+    lcdAmbientGlow.position.set(0, -0.2, headDepth / 2 + 0.5);
+    headGroup.add(lcdAmbientGlow);
+
+    // Face state
+    let currentExpression = 'neutral';
+    let faceColor = '#00ffff'; // Cyan like reference
+    let displayText = ''; // Text to show on LCD
+    let displayTextTimeout = null;
+
+    // Show text on LCD face
+    function showTextOnFace(text, duration = 3000) {
+      displayText = text;
+      if (displayTextTimeout) clearTimeout(displayTextTimeout);
+      if (duration > 0) {
+        displayTextTimeout = setTimeout(() => {
+          displayText = '';
+        }, duration);
+      }
+    }
+
+    // Update response panel
+    function updateResponse(text) {
+      document.getElementById('robot-response-text').innerHTML = text;
+    }
+
+    // Draw face function
+    function drawFace(time) {
+      const ctx = faceCtx;
+      const w = faceCanvas.width;
+      const h = faceCanvas.height;
+
+      // Clear
+      ctx.clearRect(0, 0, w, h);
+
+      // Glow settings
+      ctx.shadowColor = faceColor;
+      ctx.shadowBlur = 20;
+      ctx.fillStyle = faceColor;
+      ctx.strokeStyle = faceColor;
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+
+      // If there's text to display, show it instead of expression
+      if (displayText) {
+        ctx.font = 'bold 28px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // Word wrap for long text
+        const words = displayText.split(' ');
+        const lines = [];
+        let currentLine = '';
+
+        words.forEach(word => {
+          const testLine = currentLine + (currentLine ? ' ' : '') + word;
+          if (ctx.measureText(testLine).width > w - 40) {
+            lines.push(currentLine);
+            currentLine = word;
+          } else {
+            currentLine = testLine;
+          }
+        });
+        lines.push(currentLine);
+
+        const lineHeight = 32;
+        const startY = h/2 - (lines.length - 1) * lineHeight / 2;
+
+        lines.forEach((line, i) => {
+          ctx.fillText(line, w/2, startY + i * lineHeight);
+        });
+
+        faceTexture.needsUpdate = true;
+        return;
+      }
+
+      const eyeY = h * 0.42;
+      const eyeSpacing = w * 0.22;
+      const eyeWidth = 35;
+      const eyeHeight = 45;
+
+      // Blink animation
+      const blinkCycle = Math.sin(time * 0.003);
+      const blinkScale = blinkCycle > 0.95 ? 0.1 : 1;
+
+      if (currentExpression === 'neutral') {
+        // Oval eyes
+        ctx.beginPath();
+        ctx.ellipse(w/2 - eyeSpacing, eyeY, eyeWidth, eyeHeight * blinkScale, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(w/2 + eyeSpacing, eyeY, eyeWidth, eyeHeight * blinkScale, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Small smile
+        ctx.beginPath();
+        ctx.arc(w/2, h * 0.72, 25, 0.1 * Math.PI, 0.9 * Math.PI, false);
+        ctx.stroke();
+      } else if (currentExpression === 'happy') {
+        // Happy curved eyes
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.arc(w/2 - eyeSpacing, eyeY + 10, 28, Math.PI, 2 * Math.PI);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(w/2 + eyeSpacing, eyeY + 10, 28, Math.PI, 2 * Math.PI);
+        ctx.stroke();
+        // Big smile
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(w/2, h * 0.68, 35, 0.15 * Math.PI, 0.85 * Math.PI);
+        ctx.stroke();
+      } else if (currentExpression === 'thinking') {
+        // One eye normal, one raised
+        ctx.beginPath();
+        ctx.ellipse(w/2 - eyeSpacing, eyeY, eyeWidth, eyeHeight * blinkScale, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(w/2 + eyeSpacing, eyeY - 8, eyeWidth * 0.9, eyeHeight * 0.7, -0.2, 0, Math.PI * 2);
+        ctx.fill();
+        // Wavy mouth
+        ctx.beginPath();
+        ctx.moveTo(w/2 - 25, h * 0.72);
+        ctx.quadraticCurveTo(w/2, h * 0.68, w/2 + 25, h * 0.72);
+        ctx.stroke();
+      } else if (currentExpression === 'surprised') {
+        // Big round eyes
+        ctx.beginPath();
+        ctx.arc(w/2 - eyeSpacing, eyeY, 32, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(w/2 + eyeSpacing, eyeY, 32, 0, Math.PI * 2);
+        ctx.fill();
+        // O mouth
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(w/2, h * 0.72, 18, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (currentExpression === 'love') {
+        // Heart eyes
+        const drawHeart = (cx, cy, size) => {
+          ctx.beginPath();
+          ctx.moveTo(cx, cy + size * 0.3);
+          ctx.bezierCurveTo(cx, cy, cx - size, cy, cx - size, cy + size * 0.5);
+          ctx.bezierCurveTo(cx - size, cy + size, cx, cy + size * 1.2, cx, cy + size * 1.5);
+          ctx.bezierCurveTo(cx, cy + size * 1.2, cx + size, cy + size, cx + size, cy + size * 0.5);
+          ctx.bezierCurveTo(cx + size, cy, cx, cy, cx, cy + size * 0.3);
+          ctx.fill();
+        };
+        drawHeart(w/2 - eyeSpacing, eyeY - 25, 22);
+        drawHeart(w/2 + eyeSpacing, eyeY - 25, 22);
+        // Smile
+        ctx.beginPath();
+        ctx.arc(w/2, h * 0.7, 30, 0.1 * Math.PI, 0.9 * Math.PI);
+        ctx.stroke();
+      } else if (currentExpression === 'loading') {
+        // Spinning dots
+        const dotCount = 8;
+        const radius = 35;
+        for (let i = 0; i < dotCount; i++) {
+          const angle = (i / dotCount) * Math.PI * 2 + time * 0.005;
+          const x = w/2 + Math.cos(angle) * radius;
+          const y = h/2 + Math.sin(angle) * radius;
+          const alpha = ((i / dotCount) + (time * 0.002)) % 1;
+          ctx.globalAlpha = alpha;
+          ctx.beginPath();
+          ctx.arc(x, y, 8, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      } else if (currentExpression === 'sad') {
+        // Droopy eyes
+        ctx.beginPath();
+        ctx.ellipse(w/2 - eyeSpacing, eyeY + 8, eyeWidth * 0.9, eyeHeight * 0.6 * blinkScale, 0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(w/2 + eyeSpacing, eyeY + 8, eyeWidth * 0.9, eyeHeight * 0.6 * blinkScale, -0.2, 0, Math.PI * 2);
+        ctx.fill();
+        // Frown
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(w/2, h * 0.82, 25, 1.1 * Math.PI, 1.9 * Math.PI);
+        ctx.stroke();
+      } else if (currentExpression === 'angry') {
+        // Angry slanted eyes
+        ctx.save();
+        ctx.translate(w/2 - eyeSpacing, eyeY);
+        ctx.rotate(-0.3);
+        ctx.fillRect(-eyeWidth, -eyeHeight * 0.3 * blinkScale, eyeWidth * 2, eyeHeight * 0.6 * blinkScale);
+        ctx.restore();
+        ctx.save();
+        ctx.translate(w/2 + eyeSpacing, eyeY);
+        ctx.rotate(0.3);
+        ctx.fillRect(-eyeWidth, -eyeHeight * 0.3 * blinkScale, eyeWidth * 2, eyeHeight * 0.6 * blinkScale);
+        ctx.restore();
+        // Angry mouth
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(w/2 - 30, h * 0.72);
+        ctx.lineTo(w/2 + 30, h * 0.72);
+        ctx.stroke();
+      } else if (currentExpression === 'wink') {
+        // One eye open, one closed (winking)
+        ctx.beginPath();
+        ctx.ellipse(w/2 - eyeSpacing, eyeY, eyeWidth, eyeHeight * blinkScale, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Closed winking eye
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.arc(w/2 + eyeSpacing, eyeY, 25, 0, Math.PI);
+        ctx.stroke();
+        // Cheeky smile
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(w/2 + 10, h * 0.70, 30, 0.1 * Math.PI, 0.9 * Math.PI);
+        ctx.stroke();
+      } else if (currentExpression === 'excited') {
+        // Big sparkly eyes with stars
+        ctx.beginPath();
+        ctx.arc(w/2 - eyeSpacing, eyeY, 30, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(w/2 + eyeSpacing, eyeY, 30, 0, Math.PI * 2);
+        ctx.fill();
+        // Star highlights in eyes
+        ctx.fillStyle = '#000';
+        const drawStar = (cx, cy, size) => {
+          ctx.beginPath();
+          for (let i = 0; i < 4; i++) {
+            const angle = (i / 4) * Math.PI * 2 - Math.PI / 2;
+            const x = cx + Math.cos(angle) * size;
+            const y = cy + Math.sin(angle) * size;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+            const midAngle = angle + Math.PI / 4;
+            const mx = cx + Math.cos(midAngle) * size * 0.4;
+            const my = cy + Math.sin(midAngle) * size * 0.4;
+            ctx.lineTo(mx, my);
+          }
+          ctx.closePath();
+          ctx.fill();
+        };
+        drawStar(w/2 - eyeSpacing - 8, eyeY - 8, 8);
+        drawStar(w/2 + eyeSpacing - 8, eyeY - 8, 8);
+        ctx.fillStyle = faceColor;
+        // Wide smile
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(w/2, h * 0.68, 35, 0.1 * Math.PI, 0.9 * Math.PI);
+        ctx.stroke();
+        // Teeth suggestion
+        ctx.beginPath();
+        ctx.moveTo(w/2 - 20, h * 0.72);
+        ctx.lineTo(w/2 + 20, h * 0.72);
+        ctx.stroke();
+      } else if (currentExpression === 'sleepy') {
+        // Half-closed droopy eyes
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.arc(w/2 - eyeSpacing, eyeY + 5, 25, 0.3 * Math.PI, 0.7 * Math.PI);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(w/2 + eyeSpacing, eyeY + 5, 25, 0.3 * Math.PI, 0.7 * Math.PI);
+        ctx.stroke();
+        // Sleepy yawn mouth
+        ctx.beginPath();
+        ctx.ellipse(w/2, h * 0.73, 15, 20, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        // Zzz
+        ctx.font = 'bold 18px Inter, sans-serif';
+        ctx.fillText('z', w * 0.75, h * 0.35);
+        ctx.font = 'bold 14px Inter, sans-serif';
+        ctx.fillText('z', w * 0.80, h * 0.28);
+        ctx.font = 'bold 10px Inter, sans-serif';
+        ctx.fillText('z', w * 0.84, h * 0.22);
+      } else if (currentExpression === 'confused') {
+        // Asymmetric confused eyes
+        ctx.beginPath();
+        ctx.ellipse(w/2 - eyeSpacing, eyeY, eyeWidth, eyeHeight * blinkScale, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(w/2 + eyeSpacing, eyeY - 5, eyeWidth * 0.8, eyeHeight * 0.7 * blinkScale, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Question mark eyebrow
+        ctx.font = 'bold 24px Inter, sans-serif';
+        ctx.fillText('?', w/2 + eyeSpacing + 15, eyeY - 25);
+        // Wavy confused mouth
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(w/2 - 30, h * 0.72);
+        ctx.quadraticCurveTo(w/2 - 10, h * 0.68, w/2, h * 0.72);
+        ctx.quadraticCurveTo(w/2 + 10, h * 0.76, w/2 + 30, h * 0.72);
+        ctx.stroke();
+      }
+
+      // Update texture
+      faceTexture.needsUpdate = true;
+    }
+
+    // --- EAR/SIDE DETAIL ---
+    const earGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.15, 16);
+    const leftEar = new THREE.Mesh(earGeo, lightGrayMat);
+    leftEar.rotation.z = Math.PI / 2;
+    leftEar.position.set(-headWidth/2 - 0.05, 0, 0);
+    headGroup.add(leftEar);
+
+    const rightEar = new THREE.Mesh(earGeo, lightGrayMat);
+    rightEar.rotation.z = Math.PI / 2;
+    rightEar.position.set(headWidth/2 + 0.05, 0, 0);
+    headGroup.add(rightEar);
+
+    // --- CAMERA ON HEAD ---
+    const cameraMount = new THREE.Group();
+    cameraMount.position.set(0, headHeight/2 + 0.08, 0);
+    headGroup.add(cameraMount);
+
+    const cameraDomeGeo = new THREE.SphereGeometry(0.08, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+    const cameraDome = new THREE.Mesh(cameraDomeGeo, new THREE.MeshStandardMaterial({
+      color: 0x222222,
+      roughness: 0.3,
+      metalness: 0.5
+    }));
+    cameraMount.add(cameraDome);
+
+    const cameraLensGeo = new THREE.CylinderGeometry(0.03, 0.04, 0.03, 12);
+    const cameraLens = new THREE.Mesh(cameraLensGeo, chromeMat);
+    cameraLens.rotation.x = Math.PI / 2;
+    cameraLens.position.set(0, 0.03, 0.05);
+    cameraMount.add(cameraLens);
+
+    // Camera LED indicator
+    const ledGeo = new THREE.SphereGeometry(0.015, 8, 8);
+    const ledMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+    const cameraLed = new THREE.Mesh(ledGeo, ledMat);
+    cameraLed.position.set(0.05, 0.02, 0.05);
+    cameraMount.add(cameraLed);
+
+    // --- WHEELS ---
+    function createWheel(side) {
+      const wheelGroup = new THREE.Group();
+
+      // Tire (rubber)
+      const tireGeo = new THREE.TorusGeometry(0.3, 0.12, 16, 32);
+      const tire = new THREE.Mesh(tireGeo, rubberMat);
+      tire.rotation.y = Math.PI / 2;
+      tire.castShadow = true;
+      wheelGroup.add(tire);
+
+      // Hubcap (white)
+      const hubGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.08, 24);
+      const hub = new THREE.Mesh(hubGeo, whiteMat);
+      hub.rotation.z = Math.PI / 2;
+      hub.castShadow = true;
+      wheelGroup.add(hub);
+
+      // Center cap (chrome)
+      const centerGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.1, 16);
+      const center = new THREE.Mesh(centerGeo, chromeMat);
+      center.rotation.z = Math.PI / 2;
+      center.position.x = side * 0.02;
+      wheelGroup.add(center);
+
+      // Spokes
+      for (let i = 0; i < 5; i++) {
+        const angle = (i / 5) * Math.PI * 2;
+        const spokeGeo = new THREE.BoxGeometry(0.03, 0.15, 0.04);
+        const spoke = new THREE.Mesh(spokeGeo, chromeMat);
+        spoke.position.set(
+          0,
+          Math.cos(angle) * 0.12,
+          Math.sin(angle) * 0.12
+        );
+        spoke.rotation.x = angle;
+        wheelGroup.add(spoke);
+      }
+
+      return wheelGroup;
+    }
+
+    const leftWheel = createWheel(-1);
+    leftWheel.position.set(-0.6, 0.32, 0);
+    robot.add(leftWheel);
+
+    const rightWheel = createWheel(1);
+    rightWheel.position.set(0.6, 0.32, 0);
+    robot.add(rightWheel);
+
+    // --- SMALL CASTER WHEEL (back) ---
+    const casterGeo = new THREE.SphereGeometry(0.08, 12, 12);
+    const caster = new THREE.Mesh(casterGeo, rubberMat);
+    caster.position.set(0, 0.08, -bodyDepth/2 + 0.05);
+    caster.castShadow = true;
+    robot.add(caster);
+
+    // Caster mount
+    const casterMountGeo = new THREE.CylinderGeometry(0.04, 0.06, 0.15, 8);
+    const casterMount = new THREE.Mesh(casterMountGeo, silverMat);
+    casterMount.position.set(0, 0.2, -bodyDepth/2 + 0.05);
+    robot.add(casterMount);
+
+    scene.add(robot);
+
+    // =====================================================
+    // DUST PARTICLE SYSTEM
+    // =====================================================
+
+    // Simple custom particle system for wheel dust
+    const dustParticles = [];
+    const MAX_DUST_PARTICLES = 50;
+
+    const dustGeometry = new THREE.SphereGeometry(0.02, 4, 4);
+    const dustMaterial = new THREE.MeshBasicMaterial({
+      color: 0x888888,
+      transparent: true,
+      opacity: 0.4
+    });
+
+    // Pre-create particle pool
+    for (let i = 0; i < MAX_DUST_PARTICLES; i++) {
+      const particle = new THREE.Mesh(dustGeometry, dustMaterial.clone());
+      particle.visible = false;
+      particle.userData = {
+        velocity: new THREE.Vector3(),
+        life: 0,
+        maxLife: 0
+      };
+      scene.add(particle);
+      dustParticles.push(particle);
+    }
+
+    let nextDustParticle = 0;
+    let lastDustTime = 0;
+
+    function spawnDustParticle(x, y, z, velocityX, velocityZ) {
+      const particle = dustParticles[nextDustParticle];
+      nextDustParticle = (nextDustParticle + 1) % MAX_DUST_PARTICLES;
+
+      particle.position.set(x, y, z);
+      particle.visible = true;
+      particle.material.opacity = 0.3 + Math.random() * 0.2;
+      particle.scale.setScalar(0.5 + Math.random() * 0.5);
+
+      particle.userData.velocity.set(
+        velocityX + (Math.random() - 0.5) * 0.3,
+        0.3 + Math.random() * 0.2,
+        velocityZ + (Math.random() - 0.5) * 0.3
+      );
+      particle.userData.life = 0;
+      particle.userData.maxLife = 0.6 + Math.random() * 0.4;
+    }
+
+    function updateDustParticles(delta, currentTime) {
+      // Update existing particles
+      for (const particle of dustParticles) {
+        if (!particle.visible) continue;
+
+        particle.userData.life += delta;
+        const lifeRatio = particle.userData.life / particle.userData.maxLife;
+
+        if (lifeRatio >= 1) {
+          particle.visible = false;
+          continue;
+        }
+
+        // Move particle
+        particle.position.add(particle.userData.velocity.clone().multiplyScalar(delta));
+        particle.userData.velocity.y -= 0.5 * delta; // Gravity
+        particle.userData.velocity.multiplyScalar(0.98); // Air resistance
+
+        // Fade out
+        particle.material.opacity = 0.4 * (1 - lifeRatio);
+        particle.scale.setScalar((0.5 + Math.random() * 0.3) * (1 + lifeRatio * 0.5));
+      }
+
+      // Spawn new particles when moving
+      const speed = Math.abs(robotState.velocity);
+      if (speed > 0.3 && currentTime - lastDustTime > 50) {
+        lastDustTime = currentTime;
+
+        // Spawn from both wheels
+        const spawnChance = Math.min(1, speed / PHYSICS.maxSpeed);
+        if (Math.random() < spawnChance) {
+          // Left wheel dust
+          const leftWheelWorld = new THREE.Vector3(-0.6, 0.1, -0.2);
+          leftWheelWorld.applyQuaternion(robot.quaternion);
+          leftWheelWorld.add(robot.position);
+
+          spawnDustParticle(
+            leftWheelWorld.x,
+            0.05,
+            leftWheelWorld.z,
+            -Math.sin(robotState.rotation) * speed * 0.2,
+            -Math.cos(robotState.rotation) * speed * 0.2
+          );
+
+          // Right wheel dust
+          const rightWheelWorld = new THREE.Vector3(0.6, 0.1, -0.2);
+          rightWheelWorld.applyQuaternion(robot.quaternion);
+          rightWheelWorld.add(robot.position);
+
+          spawnDustParticle(
+            rightWheelWorld.x,
+            0.05,
+            rightWheelWorld.z,
+            -Math.sin(robotState.rotation) * speed * 0.2,
+            -Math.cos(robotState.rotation) * speed * 0.2
+          );
+        }
+      }
+
+      // Extra dust when turning sharply
+      if (Math.abs(robotState.angularVelocity) > 1.0 && speed > 0.5) {
+        if (currentTime - lastDustTime > 30) {
+          lastDustTime = currentTime;
+          const dustX = robot.position.x + (Math.random() - 0.5) * 0.5;
+          const dustZ = robot.position.z + (Math.random() - 0.5) * 0.5;
+          spawnDustParticle(dustX, 0.05, dustZ, 0, 0);
+        }
+      }
+    }
+
+    // =====================================================
+    // PHYSICS-BASED MOVEMENT SYSTEM
+    // =====================================================
+
+    // Robot physics state
+    const robotState = {
+      x: 0,
+      z: 0,
+      rotation: 0,           // Body rotation (Y axis)
+      headRotY: 0,           // Head rotation relative to body
+      wheelRotation: 0,      // For visible wheel spin
+
+      // Physics velocities
+      velocity: 0,           // Forward/backward speed
+      angularVelocity: 0,    // Turning speed
+      headAngularVel: 0,     // Head turning speed
+
+      // For body dynamics
+      bodyTilt: 0,           // Forward/back tilt (acceleration)
+      bodyLean: 0,           // Side lean (turning)
+      suspensionOffset: 0,   // Vertical bounce
+      suspensionVelocity: 0  // Bounce velocity
+    };
+
+    // Movement input flags
+    const actions = {
+      forward: false,
+      backward: false,
+      turnLeft: false,
+      turnRight: false,
+      headLeft: false,
+      headRight: false
+    };
+
+    // --- COLLISION DETECTION SYSTEM ---
+    const ROBOT_RADIUS = 0.5; // Robot collision radius
+    const COLLISION_PADDING = 0.1; // Extra buffer space
+
+    // Check collision with walls (AABB)
+    function checkWallCollision(newX, newZ) {
+      const r = ROBOT_RADIUS + COLLISION_PADDING;
+
+      // Room boundaries (matching wall positions)
+      const minX = -9 + r;   // Left wall
+      const maxX = 9 - r;    // Right wall
+      const minZ = -9 + r;   // Back wall
+      const maxZ = 10;       // Open front
+
+      return {
+        x: Math.max(minX, Math.min(maxX, newX)),
+        z: Math.max(minZ, Math.min(maxZ, newZ))
+      };
+    }
+
+    // Check collision with circular objects
+    function checkObjectCollision(newX, newZ) {
+      const robotR = ROBOT_RADIUS + COLLISION_PADDING;
+      let resultX = newX;
+      let resultZ = newZ;
+      let collision = false;
+
+      for (const obj of collidableObjects) {
+        // Skip walls (handled separately)
+        if (obj.type === 'wall') continue;
+
+        // Get object position and radius
+        const objX = obj.x !== undefined ? obj.x : (obj.mesh ? obj.mesh.position.x : 0);
+        const objZ = obj.z !== undefined ? obj.z : (obj.mesh ? obj.mesh.position.z : 0);
+        const objR = obj.radius || 0.5;
+
+        // Calculate distance
+        const dx = newX - objX;
+        const dz = newZ - objZ;
+        const distance = Math.sqrt(dx * dx + dz * dz);
+        const minDist = robotR + objR;
+
+        // If collision, push robot out
+        if (distance < minDist && distance > 0.001) {
+          collision = true;
+          // Push out along collision normal
+          const pushDist = minDist - distance;
+          const normalX = dx / distance;
+          const normalZ = dz / distance;
+          resultX += normalX * pushDist;
+          resultZ += normalZ * pushDist;
+        }
+      }
+
+      return { x: resultX, z: resultZ, collision };
+    }
+
+    // Combined collision check
+    function resolveCollisions(newX, newZ) {
+      // First check object collisions
+      const objResult = checkObjectCollision(newX, newZ);
+
+      // Then constrain to walls
+      const wallResult = checkWallCollision(objResult.x, objResult.z);
+
+      // Check if walls constrained us (also counts as collision)
+      const wallCollision = wallResult.x !== objResult.x || wallResult.z !== objResult.z;
+
+      return {
+        x: wallResult.x,
+        z: wallResult.z,
+        collision: objResult.collision || wallCollision
+      };
+    }
+
+    // Physics parameters (tuned for realistic feel)
+    const PHYSICS = {
+      // Movement
+      maxSpeed: 2.2,
+      acceleration: 4.0,
+      deceleration: 5.0,      // Faster stop than start
+      friction: 3.0,          // Natural slowdown
+
+      // Turning
+      maxTurnSpeed: 2.2,
+      turnAccel: 6.0,
+      turnFriction: 8.0,
+
+      // Head
+      headTurnSpeed: 2.5,
+      headFriction: 6.0,
+      headMaxRotation: 1.2,
+
+      // Body dynamics
+      tiltAmount: 0.08,       // How much body tilts on accel
+      leanAmount: 0.06,       // How much body leans on turn
+      tiltSmoothing: 8.0,     // How fast tilt responds
+      leanSmoothing: 10.0,    // How fast lean responds
+
+      // Suspension
+      suspensionStiffness: 80.0,
+      suspensionDamping: 8.0,
+      bumpForce: 0.015,       // Bump on start/stop
+
+      // Wheel
+      wheelRadius: 0.3
+    };
+
+    // Update robot position and rotation with physics
+    function updateMovement(delta) {
+      const P = PHYSICS;
+
+      // --- FORWARD/BACKWARD VELOCITY ---
+      let targetVelocity = 0;
+      if (actions.forward) targetVelocity = P.maxSpeed;
+      if (actions.backward) targetVelocity = -P.maxSpeed * 0.6; // Slower reverse
+
+      // Apply acceleration or deceleration
+      if (targetVelocity !== 0) {
+        // Accelerating toward target
+        const accel = targetVelocity > robotState.velocity ? P.acceleration : P.deceleration;
+        robotState.velocity += Math.sign(targetVelocity - robotState.velocity) * accel * delta;
+
+        // Clamp to target
+        if (Math.abs(robotState.velocity) > Math.abs(targetVelocity)) {
+          robotState.velocity = targetVelocity;
+        }
+      } else {
+        // Apply friction when no input
+        if (Math.abs(robotState.velocity) > 0.01) {
+          robotState.velocity -= Math.sign(robotState.velocity) * P.friction * delta;
+        } else {
+          robotState.velocity = 0;
+        }
+      }
+
+      // --- TURNING ANGULAR VELOCITY ---
+      let targetAngularVel = 0;
+      if (actions.turnLeft) targetAngularVel = P.maxTurnSpeed;
+      if (actions.turnRight) targetAngularVel = -P.maxTurnSpeed;
+
+      // Reduce turning when moving fast (more realistic)
+      const speedFactor = 1.0 - Math.abs(robotState.velocity) / P.maxSpeed * 0.3;
+      targetAngularVel *= speedFactor;
+
+      // Apply angular acceleration
+      if (targetAngularVel !== 0) {
+        robotState.angularVelocity += (targetAngularVel - robotState.angularVelocity) * P.turnAccel * delta;
+      } else {
+        // Apply angular friction
+        if (Math.abs(robotState.angularVelocity) > 0.01) {
+          robotState.angularVelocity *= (1 - P.turnFriction * delta);
+        } else {
+          robotState.angularVelocity = 0;
+        }
+      }
+
+      // --- HEAD ROTATION ---
+      let targetHeadVel = 0;
+      if (actions.headLeft) targetHeadVel = P.headTurnSpeed;
+      if (actions.headRight) targetHeadVel = -P.headTurnSpeed;
+
+      if (targetHeadVel !== 0) {
+        robotState.headAngularVel += (targetHeadVel - robotState.headAngularVel) * P.headFriction * delta;
+      } else {
+        robotState.headAngularVel *= (1 - P.headFriction * delta);
+      }
+
+      robotState.headRotY += robotState.headAngularVel * delta;
+      robotState.headRotY = Math.max(-P.headMaxRotation, Math.min(P.headMaxRotation, robotState.headRotY));
+
+      // --- APPLY MOVEMENT ---
+      robotState.rotation += robotState.angularVelocity * delta;
+
+      const moveDistance = robotState.velocity * delta;
+      const proposedX = robotState.x + Math.sin(robotState.rotation) * moveDistance;
+      const proposedZ = robotState.z + Math.cos(robotState.rotation) * moveDistance;
+
+      // Apply collision detection
+      const resolved = resolveCollisions(proposedX, proposedZ);
+      robotState.x = resolved.x;
+      robotState.z = resolved.z;
+
+      // If we hit something, reduce velocity (bump effect)
+      if (resolved.collision) {
+        robotState.velocity *= 0.5;
+        robotState.suspensionVelocity -= 0.02 * Math.sign(robotState.velocity);
+      }
+
+      // --- WHEEL ROTATION ---
+      robotState.wheelRotation += moveDistance / P.wheelRadius;
+
+      // --- BODY TILT (pitch based on acceleration) ---
+      const accelerationForce = (targetVelocity - robotState.velocity) * 0.5;
+      const targetTilt = -accelerationForce * P.tiltAmount;
+      robotState.bodyTilt += (targetTilt - robotState.bodyTilt) * P.tiltSmoothing * delta;
+
+      // --- BODY LEAN (roll based on turning) ---
+      const targetLean = -robotState.angularVelocity * P.leanAmount * Math.max(0.3, Math.abs(robotState.velocity) / P.maxSpeed);
+      robotState.bodyLean += (targetLean - robotState.bodyLean) * P.leanSmoothing * delta;
+
+      // --- SUSPENSION BOUNCE ---
+      // Add bump when starting or stopping suddenly
+      const velocityChange = Math.abs(targetVelocity - robotState.velocity);
+      if (velocityChange > 0.5) {
+        robotState.suspensionVelocity -= P.bumpForce * Math.sign(targetVelocity - robotState.velocity);
+      }
+
+      // Spring physics for suspension
+      const springForce = -robotState.suspensionOffset * P.suspensionStiffness;
+      const dampingForce = -robotState.suspensionVelocity * P.suspensionDamping;
+      robotState.suspensionVelocity += (springForce + dampingForce) * delta;
+      robotState.suspensionOffset += robotState.suspensionVelocity * delta;
+
+      // --- APPLY TO ROBOT ---
+      robot.position.x = robotState.x;
+      robot.position.z = robotState.z;
+      robot.rotation.y = robotState.rotation;
+
+      // Apply body dynamics to the body mesh (not wheels)
+      body.rotation.x = robotState.bodyTilt;
+      body.rotation.z = robotState.bodyLean;
+      body.position.y = 0.7 + robotState.suspensionOffset;
+
+      // Neck follows body tilt slightly
+      neck.rotation.x = robotState.bodyTilt * 0.5;
+      neck.position.y = 1.25 + robotState.suspensionOffset * 0.8;
+      neckRing.position.y = 1.2 + robotState.suspensionOffset * 0.8;
+
+      // Apply wheel rotation
+      leftWheel.rotation.x = robotState.wheelRotation;
+      rightWheel.rotation.x = robotState.wheelRotation;
+
+      // Apply head rotation
+      headGroup.rotation.y = robotState.headRotY;
+
+      // Update orbit controls target to follow robot smoothly
+      controls.target.lerp(new THREE.Vector3(robotState.x, 1, robotState.z), 0.1);
+    }
+
+    // Get current speed for UI display
+    function getCurrentSpeed() {
+      return Math.abs(robotState.velocity);
+    }
+
+    function getCurrentSpeedPercent() {
+      return Math.abs(robotState.velocity) / PHYSICS.maxSpeed * 100;
+    }
+
+    // Update UI indicators
+    const speedBar = document.getElementById('speed-bar');
+    const speedValue = document.getElementById('speed-value');
+    const robotStateDisplay = document.getElementById('robot-state');
+    let lastUIUpdate = 0;
+
+    function updateUIIndicators(currentTime) {
+      // Throttle UI updates to 10fps
+      if (currentTime - lastUIUpdate < 100) return;
+      lastUIUpdate = currentTime;
+
+      const speedPercent = getCurrentSpeedPercent();
+
+      // Update speed bar
+      speedBar.style.width = speedPercent + '%';
+      speedValue.textContent = Math.round(speedPercent) + '%';
+
+      // Change color when fast
+      if (speedPercent > 70) {
+        speedBar.classList.add('fast');
+      } else {
+        speedBar.classList.remove('fast');
+      }
+
+      // Update state display
+      const isMoving = Math.abs(robotState.velocity) > 0.1;
+      const isTurning = Math.abs(robotState.angularVelocity) > 0.3;
+      const isReversing = robotState.velocity < -0.1;
+
+      robotStateDisplay.classList.remove('moving', 'turning');
+
+      if (isMoving && isTurning) {
+        robotStateDisplay.textContent = isReversing ? 'Reversing + Turn' : 'Moving + Turn';
+        robotStateDisplay.classList.add('moving');
+      } else if (isMoving) {
+        robotStateDisplay.textContent = isReversing ? 'Reversing' : 'Moving';
+        robotStateDisplay.classList.add('moving');
+      } else if (isTurning) {
+        robotStateDisplay.textContent = 'Turning';
+        robotStateDisplay.classList.add('turning');
+      } else {
+        robotStateDisplay.textContent = 'Idle';
+      }
+    }
+
+    // Keyboard controls
+    const keyMap = {
+      'KeyW': 'forward',
+      'ArrowUp': 'forward',
+      'KeyS': 'backward',
+      'ArrowDown': 'backward',
+      'KeyA': 'turnLeft',
+      'ArrowLeft': 'turnLeft',
+      'KeyD': 'turnRight',
+      'ArrowRight': 'turnRight',
+      'KeyQ': 'headLeft',
+      'KeyE': 'headRight'
+    };
+
+    window.addEventListener('keydown', (e) => {
+      const action = keyMap[e.code];
+      if (action) {
+        actions[action] = true;
+        e.preventDefault();
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      const action = keyMap[e.code];
+      if (action) {
+        actions[action] = false;
+      }
+    });
+
+    // Button controls - helper for press and hold
+    function setupButtonHold(buttonId, action) {
+      const btn = document.getElementById(buttonId);
+      if (!btn) return;
+
+      const start = () => { actions[action] = true; btn.classList.add('active'); };
+      const stop = () => { actions[action] = false; btn.classList.remove('active'); };
+
+      btn.addEventListener('mousedown', start);
+      btn.addEventListener('mouseup', stop);
+      btn.addEventListener('mouseleave', stop);
+      btn.addEventListener('touchstart', (e) => { e.preventDefault(); start(); });
+      btn.addEventListener('touchend', stop);
+    }
+
+    // Setup movement buttons
+    setupButtonHold('btn-forward', 'forward');
+    setupButtonHold('btn-backward', 'backward');
+    setupButtonHold('btn-left', 'turnLeft');
+    setupButtonHold('btn-right', 'turnRight');
+    setupButtonHold('btn-head-left', 'headLeft');
+    setupButtonHold('btn-head-right', 'headRight');
+
+    // =====================================================
+    // ROBOT POV CAMERA (Phase 1E)
+    // =====================================================
+
+    const robotCamera = new THREE.PerspectiveCamera(60, 640/360, 0.1, 50);
+
+    // Render target for robot's view
+    const robotCameraRT = new THREE.WebGLRenderTarget(640, 360, {
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+      format: THREE.RGBAFormat
+    });
+
+    const povCanvas = document.getElementById('robot-pov-canvas');
+    const povCtx = povCanvas.getContext('2d');
+
+    // Buffer for reading pixels
+    const povBuffer = new Uint8Array(640 * 360 * 4);
+    const povImageData = povCtx.createImageData(640, 360);
+
+    // Update robot camera position to match head
+    function updateRobotCamera() {
+      // Get world position of head
+      const headWorldPos = new THREE.Vector3();
+      headGroup.getWorldPosition(headWorldPos);
+
+      // Position camera at camera mount on top of head
+      robotCamera.position.set(
+        robot.position.x,
+        headWorldPos.y + 0.35,
+        robot.position.z
+      );
+
+      // Calculate look direction based on robot rotation + head rotation
+      const totalRotation = robotState.rotation + robotState.headRotY;
+
+      // Look forward in the direction the head is facing
+      const lookTarget = new THREE.Vector3(
+        robotCamera.position.x + Math.sin(totalRotation) * 10,
+        robotCamera.position.y - 0.5, // Slight downward tilt
+        robotCamera.position.z + Math.cos(totalRotation) * 10
+      );
+
+      robotCamera.lookAt(lookTarget);
+    }
+
+    // Render robot's POV to canvas
+    function renderRobotPOV() {
+      // Update camera position
+      updateRobotCamera();
+
+      // Hide robot so it doesn't see itself
+      robot.visible = false;
+
+      // Render to render target
+      renderer.setRenderTarget(robotCameraRT);
+      renderer.render(scene, robotCamera);
+
+      // Show robot again
+      robot.visible = true;
+
+      // Reset render target
+      renderer.setRenderTarget(null);
+
+      // Read pixels from render target
+      renderer.readRenderTargetPixels(robotCameraRT, 0, 0, 640, 360, povBuffer);
+
+      // Copy to ImageData (flip Y since WebGL is bottom-up)
+      for (let y = 0; y < 360; y++) {
+        for (let x = 0; x < 640; x++) {
+          const srcIdx = ((359 - y) * 640 + x) * 4; // Flip Y
+          const dstIdx = (y * 640 + x) * 4;
+          povImageData.data[dstIdx] = povBuffer[srcIdx];
+          povImageData.data[dstIdx + 1] = povBuffer[srcIdx + 1];
+          povImageData.data[dstIdx + 2] = povBuffer[srcIdx + 2];
+          povImageData.data[dstIdx + 3] = povBuffer[srcIdx + 3];
+        }
+      }
+
+      // Draw to canvas
+      povCtx.putImageData(povImageData, 0, 0);
+
+      // Add scanline effect overlay
+      povCtx.fillStyle = 'rgba(0, 0, 0, 0.03)';
+      for (let y = 0; y < 360; y += 2) {
+        povCtx.fillRect(0, y, 640, 1);
+      }
+
+      // Add vignette corners
+      const gradient = povCtx.createRadialGradient(320, 180, 100, 320, 180, 400);
+      gradient.addColorStop(0, 'rgba(0,0,0,0)');
+      gradient.addColorStop(1, 'rgba(0,0,0,0.4)');
+      povCtx.fillStyle = gradient;
+      povCtx.fillRect(0, 0, 640, 360);
+    }
+
+    // =====================================================
+    // ANIMATION LOOP WITH ORGANIC IDLE BEHAVIOR
+    // =====================================================
+
+    let lastTime = 0;
+    let lastPovRenderTime = 0;
+    const POV_RENDER_INTERVAL = 50; // 20fps for POV camera (reduces flickering)
+
+    let lastFaceDrawTime = 0;
+    const FACE_DRAW_INTERVAL = 33; // 30fps for LCD face (reduces flickering)
+
+    // Idle behavior state
+    const idleState = {
+      headLookTarget: 0,
+      headLookCurrent: 0,
+      nextLookTime: 3000,
+      breathPhase: 0,
+      attentionPhase: 0,
+      isLooking: false
+    };
+
+    // Update idle animations (organic, life-like movement)
+    function updateIdleAnimations(currentTime, delta) {
+      const isMoving = Math.abs(robotState.velocity) > 0.1 || Math.abs(robotState.angularVelocity) > 0.1;
+
+      // Breathing effect (always active, subtle)
+      idleState.breathPhase += delta * 1.5;
+      const breathAmount = Math.sin(idleState.breathPhase) * 0.008;
+      const breathAmount2 = Math.sin(idleState.breathPhase * 0.7) * 0.004;
+
+      // Apply breathing to body (very subtle vertical movement)
+      const baseBodyY = 0.7 + robotState.suspensionOffset;
+      body.position.y = baseBodyY + breathAmount + breathAmount2;
+
+      // Head has slightly different rhythm (alive feeling)
+      const headBreath = Math.sin(idleState.breathPhase * 1.1) * 0.006;
+      const baseHeadY = 1.55 + robotState.suspensionOffset * 0.8;
+      headGroup.position.y = baseHeadY + headBreath;
+
+      // Random head looks when idle (curious robot behavior)
+      if (!isMoving && !isAnimating) {
+        // Check if it's time for a new look
+        if (currentTime > idleState.nextLookTime) {
+          // Random chance to look somewhere
+          if (Math.random() < 0.4) {
+            idleState.headLookTarget = (Math.random() - 0.5) * 1.0; // Random direction
+            idleState.isLooking = true;
+          } else {
+            idleState.headLookTarget = 0; // Return to center
+            idleState.isLooking = false;
+          }
+          // Next look in 2-6 seconds
+          idleState.nextLookTime = currentTime + 2000 + Math.random() * 4000;
+        }
+
+        // Smoothly move head toward look target (only if no user input)
+        if (!actions.headLeft && !actions.headRight) {
+          const lookDiff = idleState.headLookTarget - robotState.headRotY;
+          if (Math.abs(lookDiff) > 0.01) {
+            robotState.headRotY += lookDiff * 2.0 * delta;
+          }
+        }
+
+        // Subtle attention micro-movements
+        idleState.attentionPhase += delta * 0.8;
+        const microMove = Math.sin(idleState.attentionPhase * 2.3) * 0.01 +
+                          Math.sin(idleState.attentionPhase * 1.7) * 0.008;
+        headGroup.rotation.x = microMove;
+      } else {
+        // Reset look state when moving
+        idleState.headLookTarget = 0;
+        headGroup.rotation.x = robotState.bodyTilt * 0.3; // Head follows body tilt when moving
+      }
+
+      // Panel decorations subtle movement (dots on body)
+      const dotBob = Math.sin(currentTime * 0.003) * 0.002;
+      dot1.position.y = 0.5 + dotBob;
+      dot2.position.y = 0.5 - dotBob;
+    }
+
+    function animate(currentTime) {
+      requestAnimationFrame(animate);
+
+      const delta = Math.min((currentTime - lastTime) / 1000, 0.1); // Cap delta
+      lastTime = currentTime;
+
+      // Update physics-based movement
+      updateMovement(delta);
+
+      // Update organic idle animations
+      updateIdleAnimations(currentTime, delta);
+
+      // Update dust particles
+      updateDustParticles(delta, currentTime);
+
+      // Update orbit controls
+      controls.update();
+
+      // Camera LED - more organic blink pattern
+      const ledPhase = currentTime * 0.004;
+      const ledBrightness = (Math.sin(ledPhase) > 0.7) ? 0x00ff00 :
+                            (Math.sin(ledPhase) > 0) ? 0x00aa00 : 0x005500;
+      cameraLed.material.color.setHex(ledBrightness);
+
+      // Draw LCD face at reduced rate (reduces flickering)
+      if (currentTime - lastFaceDrawTime > FACE_DRAW_INTERVAL) {
+        drawFace(currentTime);
+        lastFaceDrawTime = currentTime;
+      }
+
+      // Update UI indicators
+      updateUIIndicators(currentTime);
+
+      // Render robot POV camera at reduced rate
+      if (currentTime - lastPovRenderTime > POV_RENDER_INTERVAL) {
+        renderRobotPOV();
+        lastPovRenderTime = currentTime;
+      }
+
+      // Render main scene
+      renderer.render(scene, camera);
+    }
+
+    // =====================================================
+    // WINDOW RESIZE
+    // =====================================================
+
+    function onWindowResize() {
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+
+      renderer.setSize(width, height);
+    }
+
+    window.addEventListener('resize', onWindowResize);
+
+    // =====================================================
+    // UI EVENT LISTENERS
+    // =====================================================
+
+    // Expression buttons
+    document.querySelectorAll('.expr-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.expr-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentExpression = btn.dataset.expr;
+        console.log('Expression:', currentExpression);
+      });
+    });
+
+    // Color buttons - update face and glow lights
+    document.querySelectorAll('.color-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        faceColor = btn.dataset.color;
+
+        // Update glow light colors to match LCD
+        const glowColor = new THREE.Color(faceColor);
+        lcdGlowLight.color.copy(glowColor);
+        lcdAmbientGlow.color.copy(glowColor);
+
+        console.log('Face color:', faceColor);
+      });
+    });
+
+    // Body color buttons - update robot body materials
+    document.querySelectorAll('.body-color-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.body-color-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        const hexColor = btn.dataset.bodyColor;
+        const mainColor = new THREE.Color(hexColor);
+
+        // Create a slightly darker/desaturated accent color
+        const accentColor = mainColor.clone();
+        accentColor.multiplyScalar(0.92);
+
+        // Update body materials
+        whiteMat.color.copy(mainColor);
+        lightGrayMat.color.copy(accentColor);
+
+        // For dark colors, increase roughness slightly for matte look
+        const luminance = mainColor.r * 0.299 + mainColor.g * 0.587 + mainColor.b * 0.114;
+        if (luminance < 0.3) {
+          whiteMat.roughness = 0.45;
+          lightGrayMat.roughness = 0.55;
+        } else {
+          whiteMat.roughness = 0.35;
+          lightGrayMat.roughness = 0.45;
+        }
+
+        console.log('Body color:', hexColor);
+      });
+    });
+
+    // =====================================================
+    // QUICK COMMANDS (Phase 1F)
+    // =====================================================
+
+    let isAnimating = false;
+
+    // Wave animation
+    async function doWave() {
+      if (isAnimating) return;
+      isAnimating = true;
+
+      currentExpression = 'happy';
+      showTextOnFace('Hello!', 2500);
+      updateResponse('👋 <span style="color:#00ffff">Waving hello!</span><br><br>The robot greets you with enthusiasm!');
+
+      // Head wave animation
+      const originalHeadRot = robotState.headRotY;
+      const waveSteps = [0.4, -0.4, 0.3, -0.3, 0.2, -0.2, 0];
+
+      for (const rot of waveSteps) {
+        robotState.headRotY = rot;
+        await new Promise(r => setTimeout(r, 150));
+      }
+
+      robotState.headRotY = originalHeadRot;
+      await new Promise(r => setTimeout(r, 500));
+      currentExpression = 'neutral';
+      isAnimating = false;
+    }
+
+    // Spin animation
+    async function doSpin() {
+      if (isAnimating) return;
+      isAnimating = true;
+
+      currentExpression = 'surprised';
+      showTextOnFace('Wheee!', 2000);
+      updateResponse('🔄 <span style="color:#00ffff">Spinning around!</span><br><br>Watch me go! This is fun!');
+
+      const startRot = robotState.rotation;
+      const spinDuration = 1500;
+      const startTime = Date.now();
+
+      const spinLoop = () => {
+        const elapsed = Date.now() - startTime;
+        if (elapsed < spinDuration) {
+          const progress = elapsed / spinDuration;
+          const easeOut = 1 - Math.pow(1 - progress, 3);
+          robotState.rotation = startRot + easeOut * Math.PI * 2;
+
+          // Spin wheels too
+          robotState.wheelRotation += 0.2;
+
+          requestAnimationFrame(spinLoop);
+        } else {
+          robotState.rotation = startRot + Math.PI * 2;
+          currentExpression = 'happy';
+          setTimeout(() => {
+            currentExpression = 'neutral';
+            isAnimating = false;
+          }, 500);
+        }
+      };
+      spinLoop();
+    }
+
+    // Take photo animation
+    async function doTakePhoto() {
+      if (isAnimating) return;
+      isAnimating = true;
+
+      currentExpression = 'neutral';
+      showTextOnFace('📸', 500);
+      updateResponse('📷 <span style="color:#00ffff">Photo captured!</span><br><br>Image saved from robot camera. Ready for AI analysis!');
+
+      // Flash effect on POV canvas
+      povCtx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+      povCtx.fillRect(0, 0, 640, 360);
+
+      await new Promise(r => setTimeout(r, 100));
+
+      // Camera LED flash
+      cameraLed.material.color.setHex(0xffffff);
+      await new Promise(r => setTimeout(r, 200));
+      cameraLed.material.color.setHex(0x00ff00);
+
+      showTextOnFace('Saved!', 1500);
+      currentExpression = 'happy';
+
+      await new Promise(r => setTimeout(r, 1500));
+      currentExpression = 'neutral';
+      isAnimating = false;
+    }
+
+    // Say hello animation
+    async function doSayHello() {
+      if (isAnimating) return;
+      isAnimating = true;
+
+      const greetings = [
+        'Hi there!',
+        'Hello friend!',
+        'Hey!',
+        'Greetings!',
+        'Nice to meet you!'
+      ];
+      const greeting = greetings[Math.floor(Math.random() * greetings.length)];
+
+      currentExpression = 'happy';
+      showTextOnFace(greeting, 3000);
+      updateResponse(`💬 <span style="color:#00ffff">"${greeting}"</span><br><br>The robot speaks! Voice synthesis coming in Phase 2.`);
+
+      // Subtle head nod
+      const originalY = headGroup.position.y;
+      for (let i = 0; i < 3; i++) {
+        headGroup.position.y = originalY - 0.05;
+        await new Promise(r => setTimeout(r, 100));
+        headGroup.position.y = originalY + 0.02;
+        await new Promise(r => setTimeout(r, 100));
+      }
+      headGroup.position.y = originalY;
+
+      await new Promise(r => setTimeout(r, 2000));
+      currentExpression = 'neutral';
+      isAnimating = false;
+    }
+
+    // Attach quick command buttons
+    const quickBtns = document.querySelectorAll('.quick-btn');
+    quickBtns[0].addEventListener('click', doWave);      // Wave Hello
+    quickBtns[1].addEventListener('click', doSpin);      // Spin Around
+    quickBtns[2].addEventListener('click', doTakePhoto); // Take Photo
+    quickBtns[3].addEventListener('click', doSayHello);  // Say Hello
+
+    // =====================================================
+    // HIDE LOADING & START
+    // =====================================================
+
+    setTimeout(() => {
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('robot-status').classList.remove('warning');
+      document.getElementById('robot-status').textContent = 'Robot Ready';
+      document.getElementById('camera-status').classList.remove('offline');
+      document.getElementById('camera-status').textContent = 'Camera Live';
+      animate(0);
+    }, 1000);
+
+    console.log('🤖 Robot Simulation - Visual Polish Complete!');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('✓ Physics-based movement (acceleration/deceleration)');
+    console.log('✓ Body tilt on accel/brake, lean on turns');
+    console.log('✓ Suspension bounce effect');
+    console.log('✓ Organic idle animations (breathing, head looks)');
+    console.log('✓ LCD screen glow illumination');
+    console.log('✓ Wheel dust particles');
+    console.log('✓ Speed indicator + robot state display');
+    console.log('✓ Robot POV camera feed');
+    console.log('✓ Quick commands with animations');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('Demo ready!');
+  </script>
+</body>
+</html>
