@@ -4,8 +4,13 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import type { RobotCommands } from '@/components/RobotScene';
 
-// Dynamic import to avoid SSR issues with Three.js
+// Dynamic imports to avoid SSR issues
 const RobotScene = dynamic(() => import('@/components/RobotScene'), {
+  ssr: false,
+  loading: () => null,
+});
+
+const VoiceControl = dynamic(() => import('@/components/VoiceControl'), {
   ssr: false,
   loading: () => null,
 });
@@ -58,8 +63,10 @@ export default function Home() {
   const [robotResponse, setRobotResponse] = useState(
     'Robot systems online!<br><br><span style="color:#00ffff">Phase 1 Complete!</span><br>All systems operational ✓<br><br><span style="color:rgba(255,255,255,0.5)">Try the Quick Commands on the left panel!</span>'
   );
+  const [voiceStatus, setVoiceStatus] = useState<'disconnected' | 'connected' | 'error'>('disconnected');
 
   const robotRef = useRef<RobotCommands>(null);
+  const commandTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Simulate loading sequence like index.html
   useEffect(() => {
@@ -90,8 +97,11 @@ export default function Home() {
 
   const setRobotAction = useCallback((action: string, value: boolean) => {
     const robotActions = (window as unknown as { robotActions?: (action: string, value: boolean) => void }).robotActions;
+    console.log('setRobotAction:', action, value, 'robotActions exists:', !!robotActions);
     if (robotActions) {
       robotActions(action, value);
+    } else {
+      console.warn('robotActions not available on window');
     }
   }, []);
 
@@ -107,6 +117,47 @@ export default function Home() {
       onTouchEnd: () => setRobotAction(action, false),
     };
   }, [setRobotAction]);
+
+  // Voice command handler - executes movement for a duration then stops
+  const handleVoiceCommand = useCallback((command: string, duration?: number) => {
+    console.log('handleVoiceCommand called:', command, duration);
+    // Clear any existing timeout
+    if (commandTimeoutRef.current) {
+      clearTimeout(commandTimeoutRef.current);
+      // Stop all actions first
+      setRobotAction('forward', false);
+      setRobotAction('backward', false);
+      setRobotAction('turnLeft', false);
+      setRobotAction('turnRight', false);
+    }
+
+    if (command === 'stop') {
+      // Just stop everything
+      setRobotAction('forward', false);
+      setRobotAction('backward', false);
+      setRobotAction('turnLeft', false);
+      setRobotAction('turnRight', false);
+      return;
+    }
+
+    // Start the action
+    setRobotAction(command, true);
+
+    // Stop after duration
+    const stopDuration = duration || (command.includes('turn') ? 500 : 1000);
+    commandTimeoutRef.current = setTimeout(() => {
+      setRobotAction(command, false);
+    }, stopDuration);
+  }, [setRobotAction]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (commandTimeoutRef.current) {
+        clearTimeout(commandTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <main className="w-screen h-screen bg-[#0a0a12] overflow-hidden font-[Inter,sans-serif]">
@@ -137,6 +188,10 @@ export default function Home() {
             <span className={`w-2 h-2 rounded-full ${cameraStatus === 'ready' ? 'bg-[#22c55e] status-dot-online' : 'status-dot-offline'}`} />
             {cameraStatus === 'ready' ? 'Camera Live' : 'Camera Pending'}
           </div>
+          <div className="flex items-center gap-1.5 text-xs text-white/60">
+            <span className={`w-2 h-2 rounded-full ${voiceStatus === 'connected' ? 'bg-[#22c55e] status-dot-online' : voiceStatus === 'error' ? 'bg-[#ef4444]' : 'bg-white/30'}`} />
+            {voiceStatus === 'connected' ? 'Voice Active' : voiceStatus === 'error' ? 'Voice Error' : 'Voice Ready'}
+          </div>
         </div>
       </header>
 
@@ -145,11 +200,16 @@ export default function Home() {
         {/* Left Panel */}
         <aside className="w-[280px] bg-[rgba(20,20,30,0.8)] border-r border-white/10 p-5 flex flex-col gap-5">
           <div className="bg-[rgba(30,30,45,0.6)] rounded-xl p-4">
-            <div className="text-xs font-semibold uppercase tracking-wide text-white/50 mb-3">Voice Control</div>
-            <button className="w-full py-2.5 px-4 rounded-lg bg-[rgba(74,158,255,0.15)] text-[#4a9eff] text-sm font-medium hover:bg-[rgba(74,158,255,0.25)] transition-all">
-              🎤 Start Listening
-            </button>
-            <p className="text-xs text-white/40 mt-2 text-center">Coming in Phase 2</p>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-white/50">Voice Control</div>
+              {voiceStatus === 'connected' && (
+                <span className="w-2 h-2 bg-[#22c55e] rounded-full animate-pulse" />
+              )}
+            </div>
+            <VoiceControl
+              onCommand={handleVoiceCommand}
+              onStatusChange={setVoiceStatus}
+            />
           </div>
 
           <div className="bg-[rgba(30,30,45,0.6)] rounded-xl p-4">
@@ -395,8 +455,8 @@ export default function Home() {
       </div>
 
       {/* Phase Badge */}
-      <div className="fixed bottom-[110px] right-[340px] bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-[10px] font-semibold px-2 py-1 rounded-full">
-        PHASE 1 ✓
+      <div className="fixed bottom-[110px] right-[340px] bg-[rgba(34,197,94,0.2)] text-[#22c55e] text-[10px] font-semibold px-2 py-1 rounded-full">
+        PHASE 2 ✓
       </div>
     </main>
   );
