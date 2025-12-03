@@ -1,16 +1,13 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
+import type { RobotCommands } from '@/components/RobotScene';
 
 // Dynamic import to avoid SSR issues with Three.js
 const RobotScene = dynamic(() => import('@/components/RobotScene'), {
   ssr: false,
-  loading: () => (
-    <div className="w-full h-full flex items-center justify-center bg-[#1a1a2e]">
-      <div className="text-white text-lg">Loading 3D Scene...</div>
-    </div>
-  ),
+  loading: () => null,
 });
 
 const expressions = [
@@ -54,6 +51,37 @@ export default function Home() {
   const [bodyColor, setBodyColor] = useState('#fafaf5');
   const [speed, setSpeed] = useState(0);
   const [robotState, setRobotState] = useState('Idle');
+  const [isLoading, setIsLoading] = useState(true);
+  const [systemStatus, setSystemStatus] = useState<'pending' | 'ready'>('pending');
+  const [robotStatus, setRobotStatus] = useState<'pending' | 'ready'>('pending');
+  const [cameraStatus, setCameraStatus] = useState<'pending' | 'ready'>('pending');
+  const [robotResponse, setRobotResponse] = useState(
+    'Robot systems online!<br><br><span style="color:#00ffff">Phase 1 Complete!</span><br>All systems operational ✓<br><br><span style="color:rgba(255,255,255,0.5)">Try the Quick Commands on the left panel!</span>'
+  );
+
+  const robotRef = useRef<RobotCommands>(null);
+
+  // Simulate loading sequence like index.html
+  useEffect(() => {
+    const timer1 = setTimeout(() => {
+      setSystemStatus('ready');
+    }, 500);
+
+    const timer2 = setTimeout(() => {
+      setRobotStatus('ready');
+    }, 800);
+
+    const timer3 = setTimeout(() => {
+      setCameraStatus('ready');
+      setIsLoading(false);
+    }, 1000);
+
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      clearTimeout(timer3);
+    };
+  }, []);
 
   const handleSpeedChange = useCallback((newSpeed: number, newState: string) => {
     setSpeed(newSpeed);
@@ -82,22 +110,32 @@ export default function Home() {
 
   return (
     <main className="w-screen h-screen bg-[#0a0a12] overflow-hidden font-[Inter,sans-serif]">
+      {/* Loading Overlay */}
+      <div className={`loading-overlay ${!isLoading ? 'hidden' : ''}`}>
+        <div className="loading-spinner" />
+        <div className="loading-text">Initializing Robot Systems...</div>
+      </div>
+
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 h-14 bg-[rgba(10,10,18,0.9)] backdrop-blur-lg border-b border-white/10 flex items-center justify-between px-6 z-50">
         <div className="flex items-center gap-3 font-semibold text-lg text-white">
           <div className="w-8 h-8 bg-gradient-to-br from-[#4a9eff] to-[#00d4ff] rounded-lg flex items-center justify-center text-lg">
             🤖
           </div>
-          AI Robot Simulation
+          AI Robot Control
         </div>
         <div className="flex gap-4 items-center">
           <div className="flex items-center gap-1.5 text-xs text-white/60">
-            <span className="w-2 h-2 rounded-full bg-[#22c55e] shadow-[0_0_8px_#22c55e]" />
-            System Online
+            <span className={`w-2 h-2 rounded-full ${systemStatus === 'ready' ? 'bg-[#22c55e] status-dot-online' : 'status-dot-warning'}`} />
+            {systemStatus === 'ready' ? 'Scene Ready' : 'Scene Loading'}
           </div>
           <div className="flex items-center gap-1.5 text-xs text-white/60">
-            <span className="w-2 h-2 rounded-full bg-[#22c55e] shadow-[0_0_8px_#22c55e]" />
-            Motors Active
+            <span className={`w-2 h-2 rounded-full ${robotStatus === 'ready' ? 'bg-[#22c55e] status-dot-online' : 'status-dot-warning'}`} />
+            {robotStatus === 'ready' ? 'Robot Ready' : 'Robot Pending'}
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-white/60">
+            <span className={`w-2 h-2 rounded-full ${cameraStatus === 'ready' ? 'bg-[#22c55e] status-dot-online' : 'status-dot-offline'}`} />
+            {cameraStatus === 'ready' ? 'Camera Live' : 'Camera Pending'}
           </div>
         </div>
       </header>
@@ -117,16 +155,28 @@ export default function Home() {
           <div className="bg-[rgba(30,30,45,0.6)] rounded-xl p-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-white/50 mb-3">Quick Commands</div>
             <div className="flex flex-col gap-2">
-              <button className="py-2.5 px-4 rounded-lg bg-[rgba(74,158,255,0.15)] text-[#4a9eff] text-sm font-medium text-left hover:bg-[rgba(74,158,255,0.25)] transition-all">
+              <button
+                onClick={() => robotRef.current?.doWave()}
+                className="py-2.5 px-4 rounded-lg bg-[rgba(74,158,255,0.15)] text-[#4a9eff] text-sm font-medium text-left hover:bg-[rgba(74,158,255,0.25)] transition-all"
+              >
                 👋 Wave Hello
               </button>
-              <button className="py-2.5 px-4 rounded-lg bg-[rgba(74,158,255,0.15)] text-[#4a9eff] text-sm font-medium text-left hover:bg-[rgba(74,158,255,0.25)] transition-all">
+              <button
+                onClick={() => robotRef.current?.doSpin()}
+                className="py-2.5 px-4 rounded-lg bg-[rgba(74,158,255,0.15)] text-[#4a9eff] text-sm font-medium text-left hover:bg-[rgba(74,158,255,0.25)] transition-all"
+              >
                 🔄 Spin Around
               </button>
-              <button className="py-2.5 px-4 rounded-lg bg-[rgba(74,158,255,0.15)] text-[#4a9eff] text-sm font-medium text-left hover:bg-[rgba(74,158,255,0.25)] transition-all">
+              <button
+                onClick={() => robotRef.current?.doTakePhoto()}
+                className="py-2.5 px-4 rounded-lg bg-[rgba(74,158,255,0.15)] text-[#4a9eff] text-sm font-medium text-left hover:bg-[rgba(74,158,255,0.25)] transition-all"
+              >
                 📷 Take Photo
               </button>
-              <button className="py-2.5 px-4 rounded-lg bg-[rgba(74,158,255,0.15)] text-[#4a9eff] text-sm font-medium text-left hover:bg-[rgba(74,158,255,0.25)] transition-all">
+              <button
+                onClick={() => robotRef.current?.doSayHello()}
+                className="py-2.5 px-4 rounded-lg bg-[rgba(74,158,255,0.15)] text-[#4a9eff] text-sm font-medium text-left hover:bg-[rgba(74,158,255,0.25)] transition-all"
+              >
                 💬 Say Hello
               </button>
             </div>
@@ -146,73 +196,87 @@ export default function Home() {
         </aside>
 
         {/* 3D Scene */}
-        <div className="flex-1 relative pb-[120px]">
+        <div className="flex-1 relative pb-[100px]">
           <RobotScene
+            ref={robotRef}
             expression={expression}
             faceColor={faceColor}
             bodyColor={bodyColor}
             onSpeedChange={handleSpeedChange}
+            onExpressionChange={setExpression}
+            onResponseUpdate={setRobotResponse}
           />
         </div>
 
         {/* Right Panel */}
-        <aside className="w-[320px] bg-[rgba(20,20,30,0.8)] border-l border-white/10 p-5 flex flex-col gap-5">
+        <aside className="w-[320px] bg-[rgba(20,20,30,0.8)] border-l border-white/10 p-5 flex flex-col gap-4 overflow-y-auto">
           <div className="bg-[rgba(30,30,45,0.6)] rounded-xl p-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-white/50 mb-3">Robot Camera</div>
             <div className="bg-black rounded-xl overflow-hidden aspect-video relative border-2 border-[rgba(74,158,255,0.3)]">
               <span className="absolute top-2 left-2 text-[10px] font-semibold text-[#4a9eff] bg-black/60 px-2 py-1 rounded z-10">
                 ROBOT POV
               </span>
-              <span className="absolute top-2 right-2 text-[10px] font-semibold text-[#ef4444] bg-black/60 px-2 py-1 rounded z-10 animate-pulse">
+              <span className="absolute top-2 right-2 text-[10px] font-semibold text-[#ef4444] bg-black/60 px-2 py-1 rounded z-10 animate-blink">
                 ● REC
               </span>
               <canvas id="robot-pov-canvas" width={640} height={360} className="w-full h-full object-cover" />
             </div>
           </div>
 
-          <div className="bg-[rgba(30,30,45,0.6)] rounded-xl p-4 flex-1 overflow-y-auto">
-            <div className="text-xs font-semibold uppercase tracking-wide text-white/50 mb-3">Robot Response</div>
-            <div className="text-sm leading-relaxed text-white/80">
-              Robot systems online!<br /><br />
-              <span className="text-[#00ffff]">Phase 1 Complete!</span><br />
-              All systems operational ✓<br /><br />
-              <span className="text-white/50">Try the Quick Commands on the left panel!</span>
+          <div className="bg-[rgba(30,30,45,0.6)] rounded-xl p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-white/50 mb-3">Security Camera</div>
+            <div className="bg-black rounded-xl overflow-hidden aspect-video relative border-2 border-[rgba(255,200,0,0.3)]">
+              <span className="absolute top-2 left-2 text-[10px] font-semibold text-[#ffc800] bg-black/60 px-2 py-1 rounded z-10">
+                CAM-01
+              </span>
+              <span className="absolute top-2 right-2 text-[10px] font-semibold text-[#ef4444] bg-black/60 px-2 py-1 rounded z-10 animate-blink">
+                ● REC
+              </span>
+              <canvas id="security-cam-canvas" width={640} height={360} className="w-full h-full object-cover" />
             </div>
+          </div>
+
+          <div className="bg-[rgba(30,30,45,0.6)] rounded-xl p-4 flex-1 overflow-y-auto min-h-[100px]">
+            <div className="text-xs font-semibold uppercase tracking-wide text-white/50 mb-3">Robot Response</div>
+            <div
+              className="text-sm leading-relaxed text-white/80"
+              dangerouslySetInnerHTML={{ __html: robotResponse }}
+            />
           </div>
         </aside>
       </div>
 
       {/* Bottom Controls */}
-      <div className="fixed bottom-0 left-[280px] right-[320px] h-[120px] bg-[rgba(20,20,30,0.95)] backdrop-blur-lg border-t border-white/10 flex items-center justify-center gap-10 px-10">
+      <div className="fixed bottom-0 left-[280px] right-[320px] h-[100px] bg-[rgba(20,20,30,0.95)] backdrop-blur-lg border-t border-white/10 flex items-center justify-center gap-6 px-6">
         {/* Movement Pad */}
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-white/50 text-center mb-2">Movement</div>
-          <div className="grid grid-cols-3 gap-1">
+        <div className="flex flex-col items-center">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-white/50 mb-1">Move</div>
+          <div className="grid grid-cols-3 gap-0.5">
             <div />
             <button
               {...setupButtonHold('forward')}
-              className="w-12 h-12 border-none rounded-lg bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-xl cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
+              className="w-9 h-9 border-none rounded-md bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-base cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
             >
               ↑
             </button>
             <div />
             <button
               {...setupButtonHold('turnLeft')}
-              className="w-12 h-12 border-none rounded-lg bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-xl cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
+              className="w-9 h-9 border-none rounded-md bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-base cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
             >
               ←
             </button>
             <div />
             <button
               {...setupButtonHold('turnRight')}
-              className="w-12 h-12 border-none rounded-lg bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-xl cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
+              className="w-9 h-9 border-none rounded-md bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-base cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
             >
               →
             </button>
             <div />
             <button
               {...setupButtonHold('backward')}
-              className="w-12 h-12 border-none rounded-lg bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-xl cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
+              className="w-9 h-9 border-none rounded-md bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-base cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
             >
               ↓
             </button>
@@ -221,34 +285,36 @@ export default function Home() {
         </div>
 
         {/* Head Controls */}
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-white/50 text-center mb-2">Head</div>
-          <div className="flex gap-2">
+        <div className="flex flex-col items-center">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-white/50 mb-1">Head</div>
+          <div className="flex gap-1">
             <button
               {...setupButtonHold('headLeft')}
-              className="w-12 h-12 border-none rounded-lg bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-xl cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
+              className="w-9 h-9 border-none rounded-md bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-base cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
             >
               ↺
             </button>
             <button
               {...setupButtonHold('headRight')}
-              className="w-12 h-12 border-none rounded-lg bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-xl cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
+              className="w-9 h-9 border-none rounded-md bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-base cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
             >
               ↻
             </button>
           </div>
         </div>
 
+        <div className="w-px h-16 bg-white/10" />
+
         {/* Expression Buttons */}
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-white/50 text-center mb-2">Expression</div>
-          <div className="grid grid-cols-6 gap-1.5">
+        <div className="flex flex-col items-center">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-white/50 mb-1">Expression</div>
+          <div className="grid grid-cols-6 gap-1">
             {expressions.map((expr) => (
               <button
                 key={expr.id}
                 onClick={() => setExpression(expr.id)}
                 title={expr.title}
-                className={`w-10 h-10 border-none rounded-lg text-xl cursor-pointer transition-all hover:bg-white/20 hover:-translate-y-0.5 ${
+                className={`w-8 h-8 border-none rounded-md text-base cursor-pointer transition-all hover:bg-white/20 hover:-translate-y-0.5 ${
                   expression === expr.id
                     ? 'bg-[rgba(74,158,255,0.3)] shadow-[0_0_12px_rgba(74,158,255,0.4)]'
                     : 'bg-white/10'
@@ -260,18 +326,20 @@ export default function Home() {
           </div>
         </div>
 
+        <div className="w-px h-16 bg-white/10" />
+
         {/* LCD Color */}
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-white/50 text-center mb-2">LCD Color</div>
-          <div className="flex gap-2">
+        <div className="flex flex-col items-center">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-white/50 mb-1">LCD</div>
+          <div className="flex gap-1.5">
             {faceColors.map((color) => (
               <button
                 key={color.id}
                 onClick={() => setFaceColor(color.id)}
                 style={{ backgroundColor: color.id }}
-                className={`w-8 h-8 rounded-full cursor-pointer border-2 transition-all hover:scale-110 ${
+                className={`w-6 h-6 rounded-full cursor-pointer border-2 transition-all hover:scale-110 ${
                   faceColor === color.id
-                    ? 'border-white shadow-[0_0_12px_currentColor]'
+                    ? 'border-white shadow-[0_0_8px_currentColor]'
                     : 'border-transparent'
                 }`}
               />
@@ -280,18 +348,18 @@ export default function Home() {
         </div>
 
         {/* Body Color */}
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-white/50 text-center mb-2">Body Color</div>
-          <div className="grid grid-cols-4 gap-1.5">
+        <div className="flex flex-col items-center">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-white/50 mb-1">Body</div>
+          <div className="grid grid-cols-4 gap-1">
             {bodyColors.map((color) => (
               <button
                 key={color.id}
                 onClick={() => setBodyColor(color.id)}
                 title={color.title}
                 style={{ backgroundColor: color.id }}
-                className={`w-8 h-8 rounded-lg cursor-pointer border-2 transition-all hover:scale-110 ${
+                className={`w-6 h-6 rounded cursor-pointer border-2 transition-all hover:scale-110 ${
                   bodyColor === color.id
-                    ? 'border-white shadow-[0_0_12px_rgba(255,255,255,0.5)]'
+                    ? 'border-white shadow-[0_0_8px_rgba(255,255,255,0.5)]'
                     : 'border-white/20 hover:border-white/50'
                 }`}
               />
@@ -299,11 +367,13 @@ export default function Home() {
           </div>
         </div>
 
+        <div className="w-px h-16 bg-white/10" />
+
         {/* Speed Indicator */}
-        <div className="min-w-[100px]">
-          <div className="text-xs font-semibold uppercase tracking-wide text-white/50 text-center mb-2">Speed</div>
-          <div className="flex items-center gap-2.5">
-            <div className="w-20 h-2 bg-white/10 rounded overflow-hidden">
+        <div className="flex flex-col items-center min-w-[80px]">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-white/50 mb-1">Speed</div>
+          <div className="flex items-center gap-2">
+            <div className="w-14 h-1.5 bg-white/10 rounded overflow-hidden">
               <div
                 className={`h-full rounded transition-all duration-100 ${
                   speed > 70 ? 'bg-gradient-to-r from-[#ffdd00] to-[#ff8844]' : 'bg-gradient-to-r from-[#00ff88] to-[#00d4ff]'
@@ -311,25 +381,22 @@ export default function Home() {
                 style={{ width: `${speed}%` }}
               />
             </div>
-            <div className="text-sm font-semibold text-[#00d4ff] min-w-[36px] text-right">{Math.round(speed)}%</div>
+            <div className="text-xs font-semibold text-[#00d4ff] min-w-[32px] text-right">{Math.round(speed)}%</div>
           </div>
-          <div className="mt-2">
-            <div className="flex gap-1.5 text-[11px]">
-              <span className="text-white/50">State:</span>
-              <span className={`font-medium ${
-                robotState === 'Idle' ? 'text-[#00ff88]' :
-                robotState.includes('Turn') ? 'text-[#ffdd00]' : 'text-[#00d4ff]'
-              }`}>
-                {robotState}
-              </span>
-            </div>
+          <div className="mt-1">
+            <span className={`text-[10px] font-medium ${
+              robotState === 'Idle' ? 'text-[#00ff88]' :
+              robotState.includes('Turn') ? 'text-[#ffdd00]' : 'text-[#00d4ff]'
+            }`}>
+              {robotState}
+            </span>
           </div>
         </div>
       </div>
 
       {/* Phase Badge */}
-      <div className="fixed bottom-[140px] right-[340px] bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-xs font-semibold px-3 py-1.5 rounded-full">
-        PHASE 1: Visual Polish ✓
+      <div className="fixed bottom-[110px] right-[340px] bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-[10px] font-semibold px-2 py-1 rounded-full">
+        PHASE 1 ✓
       </div>
     </main>
   );

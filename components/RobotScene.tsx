@@ -1,14 +1,24 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+
+export interface RobotCommands {
+  doWave: () => Promise<void>;
+  doSpin: () => Promise<void>;
+  doTakePhoto: () => Promise<void>;
+  doSayHello: () => Promise<void>;
+  showTextOnFace: (text: string, duration?: number) => void;
+}
 
 interface RobotSceneProps {
   expression: string;
   faceColor: string;
   bodyColor: string;
   onSpeedChange?: (speed: number, state: string) => void;
+  onExpressionChange?: (expression: string) => void;
+  onResponseUpdate?: (html: string) => void;
 }
 
 // Physics parameters
@@ -36,7 +46,7 @@ const PHYSICS = {
 const ROBOT_RADIUS = 0.5;
 const COLLISION_PADDING = 0.1;
 
-export default function RobotScene({ expression, faceColor, bodyColor, onSpeedChange }: RobotSceneProps) {
+const RobotScene = forwardRef<RobotCommands, RobotSceneProps>(function RobotScene({ expression, faceColor, bodyColor, onSpeedChange, onExpressionChange, onResponseUpdate }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<{
     scene: THREE.Scene;
@@ -60,6 +70,9 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
     cameraLed: THREE.Mesh;
     robotCamera: THREE.PerspectiveCamera;
     robotCameraRT: THREE.WebGLRenderTarget;
+    securityCamera: THREE.PerspectiveCamera;
+    securityCameraRT: THREE.WebGLRenderTarget;
+    secCamMount: THREE.Group;
     collidableObjects: Array<{mesh?: THREE.Mesh; type: string; radius?: number; x?: number; z?: number}>;
     dustParticles: Array<{mesh: THREE.Mesh; velocity: THREE.Vector3; life: number; maxLife: number}>;
     chargingRing?: THREE.Mesh;
@@ -103,6 +116,7 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
   const bodyColorRef = useRef(bodyColor);
   const displayTextRef = useRef<string | null>(null);
   const displayTextTimeoutRef = useRef<number | null>(null);
+  const isAnimatingRef = useRef(false);
 
   // Update refs when props change
   useEffect(() => {
@@ -137,6 +151,170 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
     }
   }, [bodyColor]);
 
+  // Show text on face
+  const showTextOnFace = useCallback((text: string, duration = 3000) => {
+    displayTextRef.current = text;
+    if (displayTextTimeoutRef.current) {
+      clearTimeout(displayTextTimeoutRef.current);
+    }
+    if (duration > 0) {
+      displayTextTimeoutRef.current = window.setTimeout(() => {
+        displayTextRef.current = null;
+      }, duration);
+    }
+  }, []);
+
+  // Wave animation
+  const doWave = useCallback(async () => {
+    if (isAnimatingRef.current || !sceneRef.current) return;
+    isAnimatingRef.current = true;
+
+    onExpressionChange?.('happy');
+    expressionRef.current = 'happy';
+    showTextOnFace('Hello!', 2500);
+    onResponseUpdate?.('👋 <span style="color:#00ffff">Waving hello!</span><br><br>The robot greets you with enthusiasm!');
+
+    // Head wave animation
+    const state = robotStateRef.current;
+    const originalHeadRot = state.headRotY;
+    const waveSteps = [0.4, -0.4, 0.3, -0.3, 0.2, -0.2, 0];
+
+    for (const rot of waveSteps) {
+      state.headRotY = rot;
+      await new Promise(r => setTimeout(r, 150));
+    }
+
+    state.headRotY = originalHeadRot;
+    await new Promise(r => setTimeout(r, 500));
+    onExpressionChange?.('neutral');
+    expressionRef.current = 'neutral';
+    isAnimatingRef.current = false;
+  }, [onExpressionChange, onResponseUpdate, showTextOnFace]);
+
+  // Spin animation
+  const doSpin = useCallback(async () => {
+    if (isAnimatingRef.current) return;
+    isAnimatingRef.current = true;
+
+    onExpressionChange?.('surprised');
+    expressionRef.current = 'surprised';
+    showTextOnFace('Wheee!', 2000);
+    onResponseUpdate?.('🔄 <span style="color:#00ffff">Spinning around!</span><br><br>Watch me go! This is fun!');
+
+    const state = robotStateRef.current;
+    const startRot = state.rotation;
+    const spinDuration = 1500;
+    const startTime = Date.now();
+
+    await new Promise<void>(resolve => {
+      const spinLoop = () => {
+        const elapsed = Date.now() - startTime;
+        if (elapsed < spinDuration) {
+          const progress = elapsed / spinDuration;
+          const easeOut = 1 - Math.pow(1 - progress, 3);
+          state.rotation = startRot + easeOut * Math.PI * 2;
+          state.wheelRotation += 0.2;
+          requestAnimationFrame(spinLoop);
+        } else {
+          state.rotation = startRot + Math.PI * 2;
+          resolve();
+        }
+      };
+      spinLoop();
+    });
+
+    onExpressionChange?.('happy');
+    expressionRef.current = 'happy';
+    await new Promise(r => setTimeout(r, 500));
+    onExpressionChange?.('neutral');
+    expressionRef.current = 'neutral';
+    isAnimatingRef.current = false;
+  }, [onExpressionChange, onResponseUpdate, showTextOnFace]);
+
+  // Take photo animation
+  const doTakePhoto = useCallback(async () => {
+    if (isAnimatingRef.current || !sceneRef.current) return;
+    isAnimatingRef.current = true;
+
+    onExpressionChange?.('neutral');
+    expressionRef.current = 'neutral';
+    showTextOnFace('📸', 500);
+    onResponseUpdate?.('📷 <span style="color:#00ffff">Photo captured!</span><br><br>Image saved from robot camera. Ready for AI analysis!');
+
+    // Flash effect on POV canvas
+    const povCanvas = document.getElementById('robot-pov-canvas') as HTMLCanvasElement;
+    if (povCanvas) {
+      const povCtx = povCanvas.getContext('2d');
+      if (povCtx) {
+        povCtx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        povCtx.fillRect(0, 0, 640, 360);
+      }
+    }
+
+    await new Promise(r => setTimeout(r, 100));
+
+    // Camera LED flash
+    const { cameraLed } = sceneRef.current;
+    const ledMat = cameraLed.material as THREE.MeshBasicMaterial;
+    ledMat.color.setHex(0xffffff);
+    await new Promise(r => setTimeout(r, 200));
+    ledMat.color.setHex(0x00ff00);
+
+    showTextOnFace('Saved!', 1500);
+    onExpressionChange?.('happy');
+    expressionRef.current = 'happy';
+
+    await new Promise(r => setTimeout(r, 1500));
+    onExpressionChange?.('neutral');
+    expressionRef.current = 'neutral';
+    isAnimatingRef.current = false;
+  }, [onExpressionChange, onResponseUpdate, showTextOnFace]);
+
+  // Say hello animation
+  const doSayHello = useCallback(async () => {
+    if (isAnimatingRef.current || !sceneRef.current) return;
+    isAnimatingRef.current = true;
+
+    const greetings = [
+      'Hi there!',
+      'Hello friend!',
+      'Hey!',
+      'Greetings!',
+      'Nice to meet you!'
+    ];
+    const greeting = greetings[Math.floor(Math.random() * greetings.length)];
+
+    onExpressionChange?.('happy');
+    expressionRef.current = 'happy';
+    showTextOnFace(greeting, 3000);
+    onResponseUpdate?.(`💬 <span style="color:#00ffff">"${greeting}"</span><br><br>The robot speaks! Voice synthesis coming in Phase 2.`);
+
+    // Subtle head nod
+    const { headGroup } = sceneRef.current;
+    const originalY = headGroup.position.y;
+    for (let i = 0; i < 3; i++) {
+      headGroup.position.y = originalY - 0.05;
+      await new Promise(r => setTimeout(r, 100));
+      headGroup.position.y = originalY + 0.02;
+      await new Promise(r => setTimeout(r, 100));
+    }
+    headGroup.position.y = originalY;
+
+    await new Promise(r => setTimeout(r, 2000));
+    onExpressionChange?.('neutral');
+    expressionRef.current = 'neutral';
+    isAnimatingRef.current = false;
+  }, [onExpressionChange, onResponseUpdate, showTextOnFace]);
+
+  // Expose commands via ref
+  useImperativeHandle(ref, () => ({
+    doWave,
+    doSpin,
+    doTakePhoto,
+    doSayHello,
+    showTextOnFace
+  }), [doWave, doSpin, doTakePhoto, doSayHello, showTextOnFace]);
+
   // Helper function to create rounded box
   const createRoundedBox = useCallback((width: number, height: number, depth: number, radius: number, segments: number) => {
     const shape = new THREE.Shape();
@@ -166,7 +344,7 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
     return geometry;
   }, []);
 
-  // Draw face on canvas
+  // Draw face on canvas - matching reference index.html
   const drawFace = useCallback((time: number) => {
     if (!sceneRef.current) return;
     const { faceCtx, faceCanvas, faceTexture } = sceneRef.current;
@@ -177,10 +355,11 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
     const w = faceCanvas.width;
     const h = faceCanvas.height;
 
-    // Clear canvas
-    faceCtx.clearRect(0, 0, w, h);
+    // Dark LCD background
+    faceCtx.fillStyle = '#0a0a1a';
+    faceCtx.fillRect(0, 0, w, h);
 
-    // Glow settings
+    // Glow settings - matching reference
     faceCtx.shadowColor = currentFaceColor;
     faceCtx.shadowBlur = 20;
     faceCtx.fillStyle = currentFaceColor;
@@ -219,6 +398,7 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
       return;
     }
 
+    // Values matching reference (256x160 canvas)
     const eyeY = h * 0.42;
     const eyeSpacing = w * 0.22;
     const eyeWidth = 35;
@@ -228,16 +408,19 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
     const blinkScale = blinkCycle > 0.95 ? 0.1 : 1;
 
     if (currentExpression === 'neutral') {
+      // Oval eyes
       faceCtx.beginPath();
       faceCtx.ellipse(w / 2 - eyeSpacing, eyeY, eyeWidth, eyeHeight * blinkScale, 0, 0, Math.PI * 2);
       faceCtx.fill();
       faceCtx.beginPath();
       faceCtx.ellipse(w / 2 + eyeSpacing, eyeY, eyeWidth, eyeHeight * blinkScale, 0, 0, Math.PI * 2);
       faceCtx.fill();
+      // Small smile
       faceCtx.beginPath();
       faceCtx.arc(w / 2, h * 0.72, 25, 0.1 * Math.PI, 0.9 * Math.PI, false);
       faceCtx.stroke();
     } else if (currentExpression === 'happy') {
+      // Happy curved eyes
       faceCtx.lineWidth = 8;
       faceCtx.beginPath();
       faceCtx.arc(w / 2 - eyeSpacing, eyeY + 10, 28, Math.PI, 2 * Math.PI);
@@ -245,33 +428,39 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
       faceCtx.beginPath();
       faceCtx.arc(w / 2 + eyeSpacing, eyeY + 10, 28, Math.PI, 2 * Math.PI);
       faceCtx.stroke();
+      // Big smile
       faceCtx.lineWidth = 4;
       faceCtx.beginPath();
       faceCtx.arc(w / 2, h * 0.68, 35, 0.15 * Math.PI, 0.85 * Math.PI);
       faceCtx.stroke();
     } else if (currentExpression === 'thinking') {
+      // One eye normal, one raised
       faceCtx.beginPath();
       faceCtx.ellipse(w / 2 - eyeSpacing, eyeY, eyeWidth, eyeHeight * blinkScale, 0, 0, Math.PI * 2);
       faceCtx.fill();
       faceCtx.beginPath();
       faceCtx.ellipse(w / 2 + eyeSpacing, eyeY - 8, eyeWidth * 0.9, eyeHeight * 0.7, -0.2, 0, Math.PI * 2);
       faceCtx.fill();
+      // Wavy mouth
       faceCtx.beginPath();
       faceCtx.moveTo(w / 2 - 25, h * 0.72);
       faceCtx.quadraticCurveTo(w / 2, h * 0.68, w / 2 + 25, h * 0.72);
       faceCtx.stroke();
     } else if (currentExpression === 'surprised') {
+      // Big round eyes
       faceCtx.beginPath();
       faceCtx.arc(w / 2 - eyeSpacing, eyeY, 32, 0, Math.PI * 2);
       faceCtx.fill();
       faceCtx.beginPath();
       faceCtx.arc(w / 2 + eyeSpacing, eyeY, 32, 0, Math.PI * 2);
       faceCtx.fill();
+      // O mouth
       faceCtx.lineWidth = 4;
       faceCtx.beginPath();
       faceCtx.arc(w / 2, h * 0.72, 18, 0, Math.PI * 2);
       faceCtx.stroke();
     } else if (currentExpression === 'love') {
+      // Heart eyes
       const drawHeart = (cx: number, cy: number, size: number) => {
         faceCtx.beginPath();
         faceCtx.moveTo(cx, cy + size * 0.3);
@@ -283,10 +472,12 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
       };
       drawHeart(w / 2 - eyeSpacing, eyeY - 25, 22);
       drawHeart(w / 2 + eyeSpacing, eyeY - 25, 22);
+      // Smile
       faceCtx.beginPath();
       faceCtx.arc(w / 2, h * 0.7, 30, 0.1 * Math.PI, 0.9 * Math.PI);
       faceCtx.stroke();
     } else if (currentExpression === 'loading') {
+      // Spinning dots
       const dotCount = 8;
       const radius = 35;
       for (let i = 0; i < dotCount; i++) {
@@ -301,17 +492,20 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
       }
       faceCtx.globalAlpha = 1;
     } else if (currentExpression === 'sad') {
+      // Droopy eyes
       faceCtx.beginPath();
       faceCtx.ellipse(w / 2 - eyeSpacing, eyeY + 8, eyeWidth * 0.9, eyeHeight * 0.6 * blinkScale, 0.2, 0, Math.PI * 2);
       faceCtx.fill();
       faceCtx.beginPath();
       faceCtx.ellipse(w / 2 + eyeSpacing, eyeY + 8, eyeWidth * 0.9, eyeHeight * 0.6 * blinkScale, -0.2, 0, Math.PI * 2);
       faceCtx.fill();
+      // Frown
       faceCtx.lineWidth = 4;
       faceCtx.beginPath();
       faceCtx.arc(w / 2, h * 0.82, 25, 1.1 * Math.PI, 1.9 * Math.PI);
       faceCtx.stroke();
     } else if (currentExpression === 'angry') {
+      // Angry slanted eyes
       faceCtx.save();
       faceCtx.translate(w / 2 - eyeSpacing, eyeY);
       faceCtx.rotate(-0.3);
@@ -322,30 +516,36 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
       faceCtx.rotate(0.3);
       faceCtx.fillRect(-eyeWidth, -eyeHeight * 0.3 * blinkScale, eyeWidth * 2, eyeHeight * 0.6 * blinkScale);
       faceCtx.restore();
+      // Angry mouth
       faceCtx.lineWidth = 5;
       faceCtx.beginPath();
       faceCtx.moveTo(w / 2 - 30, h * 0.72);
       faceCtx.lineTo(w / 2 + 30, h * 0.72);
       faceCtx.stroke();
     } else if (currentExpression === 'wink') {
+      // One eye open, one closed (winking)
       faceCtx.beginPath();
       faceCtx.ellipse(w / 2 - eyeSpacing, eyeY, eyeWidth, eyeHeight * blinkScale, 0, 0, Math.PI * 2);
       faceCtx.fill();
+      // Closed winking eye
       faceCtx.lineWidth = 6;
       faceCtx.beginPath();
       faceCtx.arc(w / 2 + eyeSpacing, eyeY, 25, 0, Math.PI);
       faceCtx.stroke();
+      // Cheeky smile
       faceCtx.lineWidth = 4;
       faceCtx.beginPath();
       faceCtx.arc(w / 2 + 10, h * 0.70, 30, 0.1 * Math.PI, 0.9 * Math.PI);
       faceCtx.stroke();
     } else if (currentExpression === 'excited') {
+      // Big sparkly eyes with stars
       faceCtx.beginPath();
       faceCtx.arc(w / 2 - eyeSpacing, eyeY, 30, 0, Math.PI * 2);
       faceCtx.fill();
       faceCtx.beginPath();
       faceCtx.arc(w / 2 + eyeSpacing, eyeY, 30, 0, Math.PI * 2);
       faceCtx.fill();
+      // Star highlights in eyes
       faceCtx.fillStyle = '#000';
       const drawStar = (cx: number, cy: number, size: number) => {
         faceCtx.beginPath();
@@ -366,15 +566,18 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
       drawStar(w / 2 - eyeSpacing - 8, eyeY - 8, 8);
       drawStar(w / 2 + eyeSpacing - 8, eyeY - 8, 8);
       faceCtx.fillStyle = currentFaceColor;
+      // Wide smile
       faceCtx.lineWidth = 4;
       faceCtx.beginPath();
       faceCtx.arc(w / 2, h * 0.68, 35, 0.1 * Math.PI, 0.9 * Math.PI);
       faceCtx.stroke();
+      // Teeth suggestion
       faceCtx.beginPath();
       faceCtx.moveTo(w / 2 - 20, h * 0.72);
       faceCtx.lineTo(w / 2 + 20, h * 0.72);
       faceCtx.stroke();
     } else if (currentExpression === 'sleepy') {
+      // Half-closed droopy eyes
       faceCtx.lineWidth = 6;
       faceCtx.beginPath();
       faceCtx.arc(w / 2 - eyeSpacing, eyeY + 5, 25, 0.3 * Math.PI, 0.7 * Math.PI);
@@ -382,9 +585,11 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
       faceCtx.beginPath();
       faceCtx.arc(w / 2 + eyeSpacing, eyeY + 5, 25, 0.3 * Math.PI, 0.7 * Math.PI);
       faceCtx.stroke();
+      // Sleepy yawn mouth
       faceCtx.beginPath();
       faceCtx.ellipse(w / 2, h * 0.73, 15, 20, 0, 0, Math.PI * 2);
       faceCtx.stroke();
+      // Zzz
       faceCtx.font = 'bold 18px Inter, sans-serif';
       faceCtx.fillText('z', w * 0.75, h * 0.35);
       faceCtx.font = 'bold 14px Inter, sans-serif';
@@ -392,14 +597,17 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
       faceCtx.font = 'bold 10px Inter, sans-serif';
       faceCtx.fillText('z', w * 0.84, h * 0.22);
     } else if (currentExpression === 'confused') {
+      // Asymmetric confused eyes
       faceCtx.beginPath();
       faceCtx.ellipse(w / 2 - eyeSpacing, eyeY, eyeWidth, eyeHeight * blinkScale, 0, 0, Math.PI * 2);
       faceCtx.fill();
       faceCtx.beginPath();
       faceCtx.ellipse(w / 2 + eyeSpacing, eyeY - 5, eyeWidth * 0.8, eyeHeight * 0.7 * blinkScale, 0, 0, Math.PI * 2);
       faceCtx.fill();
+      // Question mark eyebrow
       faceCtx.font = 'bold 24px Inter, sans-serif';
       faceCtx.fillText('?', w / 2 + eyeSpacing + 15, eyeY - 25);
+      // Wavy confused mouth
       faceCtx.lineWidth = 4;
       faceCtx.beginPath();
       faceCtx.moveTo(w / 2 - 30, h * 0.72);
@@ -478,10 +686,10 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
     const povCanvas = document.getElementById('robot-pov-canvas') as HTMLCanvasElement;
     const povCtx = povCanvas?.getContext('2d');
 
-    // Scene setup
+    // Scene setup - brighter background
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x1a1a24);
-    scene.fog = new THREE.Fog(0x1a1a24, 12, 40);
+    scene.background = new THREE.Color(0x2a2a3a);
+    scene.fog = new THREE.Fog(0x2a2a3a, 15, 50);
 
     // Camera
     const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 100);
@@ -507,16 +715,16 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
     controls.maxPolarAngle = Math.PI / 2 + 0.1;
     controls.target.set(0, 1, 0);
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    // Lighting - brighter overall
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
     scene.add(ambientLight);
 
-    // Hemisphere light for sky/ground ambient
-    const hemiLight = new THREE.HemisphereLight(0xddeeff, 0x303030, 0.4);
+    // Hemisphere light for sky/ground ambient - brighter
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
     scene.add(hemiLight);
 
-    const keyLight = new THREE.DirectionalLight(0xfff8f0, 1.0);
-    keyLight.position.set(5, 10, 5);
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    keyLight.position.set(5, 12, 5);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.width = 2048;
     keyLight.shadow.mapSize.height = 2048;
@@ -529,35 +737,35 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
     keyLight.shadow.bias = -0.0001;
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
-    fillLight.position.set(-5, 5, -5);
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.6);
+    fillLight.position.set(-6, 8, -3);
     scene.add(fillLight);
 
-    const rimLight = new THREE.DirectionalLight(0xccddff, 0.3);
+    const rimLight = new THREE.DirectionalLight(0xccddff, 0.4);
     rimLight.position.set(0, 5, -10);
     scene.add(rimLight);
 
-    // Accent lights for visual interest
-    const blueLight = new THREE.PointLight(0x6699ff, 0.3, 15);
+    // Accent lights for visual interest - slightly brighter
+    const blueLight = new THREE.PointLight(0x6699ff, 0.4, 15);
     blueLight.position.set(-4, 3, -2);
     scene.add(blueLight);
 
-    const warmLight = new THREE.PointLight(0xffaa66, 0.2, 15);
+    const warmLight = new THREE.PointLight(0xffaa66, 0.3, 15);
     warmLight.position.set(4, 2, 4);
     scene.add(warmLight);
 
     // Collidable objects array
     const collidableObjects: Array<{mesh?: THREE.Mesh; type: string; radius?: number; x?: number; z?: number}> = [];
 
-    // Environment Materials
+    // Environment Materials - brighter colors
     const floorMat = new THREE.MeshStandardMaterial({
-      color: 0x4a4a4a,
+      color: 0x5a5a65,
       roughness: 0.6,
       metalness: 0.1
     });
 
     const wallMat = new THREE.MeshStandardMaterial({
-      color: 0x3a3a4a,
+      color: 0x555566,
       roughness: 0.8,
       metalness: 0.0
     });
@@ -596,8 +804,35 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
     const floorGeo = new THREE.PlaneGeometry(20, 20);
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -0.01;
     floor.receiveShadow = true;
     scene.add(floor);
+
+    // Floor grid lines (warehouse marking)
+    const gridHelper = new THREE.GridHelper(20, 20, 0x4a9eff, 0x333344);
+    (gridHelper.material as THREE.Material).opacity = 0.2;
+    (gridHelper.material as THREE.Material).transparent = true;
+    scene.add(gridHelper);
+
+    // Safety floor markings - yellow zone around robot start
+    const createFloorStripe = (x: number, z: number, width: number, depth: number, color: number) => {
+      const geo = new THREE.PlaneGeometry(width, depth);
+      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6 });
+      const stripe = new THREE.Mesh(geo, mat);
+      stripe.rotation.x = -Math.PI / 2;
+      stripe.position.set(x, 0.01, z);
+      return stripe;
+    };
+
+    // Yellow safety zone around robot start position
+    for (let i = 0; i < 4; i++) {
+      const angle = (i / 4) * Math.PI * 2;
+      scene.add(createFloorStripe(
+        Math.cos(angle) * 1.5,
+        Math.sin(angle) * 1.5,
+        0.1, 0.8, 0xffaa00
+      ));
+    }
 
     // Walls
     const wallGeo = new THREE.BoxGeometry(20, 4, 0.3);
@@ -621,31 +856,77 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
     scene.add(rightWall);
     collidableObjects.push({ mesh: rightWall, type: 'wall' });
 
-    // Shelving units
+    // Shelving units - proper rack structure
+    const shelfFrameMat = new THREE.MeshStandardMaterial({
+      color: 0x888899,
+      roughness: 0.4,
+      metalness: 0.7
+    });
+
+    const shelfPlateMat = new THREE.MeshStandardMaterial({
+      color: 0x999999,
+      roughness: 0.5,
+      metalness: 0.3
+    });
+
     const createShelf = (x: number, z: number) => {
       const shelfGroup = new THREE.Group();
-      const frameGeo = new THREE.BoxGeometry(2, 2.5, 0.6);
-      const frame = new THREE.Mesh(frameGeo, metalMat);
-      frame.position.y = 1.25;
-      frame.castShadow = true;
-      frame.receiveShadow = true;
-      shelfGroup.add(frame);
 
+      // Vertical posts (4 corners)
+      const postGeo = new THREE.BoxGeometry(0.08, 2.5, 0.08);
+      const postPositions = [
+        [-0.9, 1.25, -0.25],
+        [-0.9, 1.25, 0.25],
+        [0.9, 1.25, -0.25],
+        [0.9, 1.25, 0.25]
+      ];
+
+      postPositions.forEach(([px, py, pz]) => {
+        const post = new THREE.Mesh(postGeo, shelfFrameMat);
+        post.position.set(px, py, pz);
+        post.castShadow = true;
+        post.receiveShadow = true;
+        shelfGroup.add(post);
+      });
+
+      // Horizontal shelf plates (3 levels)
       for (let i = 0; i < 3; i++) {
-        const shelfPlateGeo = new THREE.BoxGeometry(1.9, 0.05, 0.55);
-        const shelfPlate = new THREE.Mesh(shelfPlateGeo, metalMat);
-        shelfPlate.position.y = 0.5 + i * 0.75;
+        const shelfPlateGeo = new THREE.BoxGeometry(1.85, 0.04, 0.55);
+        const shelfPlate = new THREE.Mesh(shelfPlateGeo, shelfPlateMat);
+        shelfPlate.position.y = 0.3 + i * 0.85;
+        shelfPlate.castShadow = true;
+        shelfPlate.receiveShadow = true;
         shelfGroup.add(shelfPlate);
 
-        const itemGeo = new THREE.BoxGeometry(0.3 + Math.random() * 0.3, 0.2 + Math.random() * 0.2, 0.25);
-        const itemMat = new THREE.MeshStandardMaterial({
-          color: new THREE.Color().setHSL(Math.random(), 0.5, 0.5),
-          roughness: 0.5
-        });
-        const item = new THREE.Mesh(itemGeo, itemMat);
-        item.position.set(-0.5 + Math.random() * 1, 0.6 + i * 0.75, 0);
-        item.castShadow = true;
-        shelfGroup.add(item);
+        // Add colorful items on each shelf
+        const numItems = 2 + Math.floor(Math.random() * 2);
+        for (let j = 0; j < numItems; j++) {
+          const itemWidth = 0.2 + Math.random() * 0.25;
+          const itemHeight = 0.15 + Math.random() * 0.2;
+          const itemDepth = 0.15 + Math.random() * 0.15;
+          const itemGeo = new THREE.BoxGeometry(itemWidth, itemHeight, itemDepth);
+          const itemMat = new THREE.MeshStandardMaterial({
+            color: new THREE.Color().setHSL(Math.random(), 0.6, 0.55),
+            roughness: 0.4
+          });
+          const item = new THREE.Mesh(itemGeo, itemMat);
+          item.position.set(
+            -0.6 + j * 0.5 + Math.random() * 0.2,
+            0.3 + i * 0.85 + itemHeight / 2 + 0.02,
+            (Math.random() - 0.5) * 0.2
+          );
+          item.castShadow = true;
+          shelfGroup.add(item);
+        }
+      }
+
+      // Cross braces on the back for stability look
+      const braceGeo = new THREE.BoxGeometry(0.03, 0.03, 0.55);
+      for (let i = 0; i < 2; i++) {
+        const brace = new THREE.Mesh(braceGeo, shelfFrameMat);
+        brace.position.set(i === 0 ? -0.9 : 0.9, 1.25, 0);
+        brace.rotation.x = Math.PI / 4;
+        shelfGroup.add(brace);
       }
 
       shelfGroup.position.set(x, 0, z);
@@ -683,11 +964,11 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
     monitor.position.set(0, 1.3, -0.2);
     workStation.add(monitor);
 
-    const screenGeo = new THREE.PlaneGeometry(0.7, 0.4);
-    const screenMat = new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.8 });
-    const screen = new THREE.Mesh(screenGeo, screenMat);
-    screen.position.set(0, 1.3, -0.17);
-    workStation.add(screen);
+    const monitorScreenGeo = new THREE.PlaneGeometry(0.7, 0.4);
+    const monitorScreenMat = new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.8 });
+    const monitorScreen = new THREE.Mesh(monitorScreenGeo, monitorScreenMat);
+    monitorScreen.position.set(0, 1.3, -0.17);
+    workStation.add(monitorScreen);
 
     workStation.position.set(-7, 0, -3);
     scene.add(workStation);
@@ -706,6 +987,72 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
     crate2.castShadow = true;
     scene.add(crate2);
     collidableObjects.push({ mesh: crate2, type: 'box', radius: 0.6, x: 7.8, z: -6 });
+
+    // Yellow security box with camera
+    const securityBoxMat = new THREE.MeshStandardMaterial({
+      color: 0xffc800,
+      roughness: 0.4,
+      metalness: 0.1
+    });
+    const securityBoxGeo = new THREE.BoxGeometry(1.2, 1.5, 1.2);
+    const securityBox = new THREE.Mesh(securityBoxGeo, securityBoxMat);
+    securityBox.position.set(7, 0.75, 4);
+    securityBox.castShadow = true;
+    securityBox.receiveShadow = true;
+    scene.add(securityBox);
+    collidableObjects.push({ mesh: securityBox, type: 'box', radius: 0.8, x: 7, z: 4 });
+
+    // Security camera mount on yellow box
+    const secCamMount = new THREE.Group();
+    secCamMount.position.set(7, 1.5, 4);
+
+    // Camera pole
+    const camPoleGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.6, 12);
+    const camPole = new THREE.Mesh(camPoleGeo, metalMat);
+    camPole.position.y = 0.3;
+    secCamMount.add(camPole);
+
+    // Camera housing
+    const camHousingGeo = new THREE.BoxGeometry(0.3, 0.2, 0.4);
+    const camHousingMat = new THREE.MeshStandardMaterial({
+      color: 0x222222,
+      roughness: 0.3,
+      metalness: 0.5
+    });
+    const camHousing = new THREE.Mesh(camHousingGeo, camHousingMat);
+    camHousing.position.set(0, 0.7, 0);
+    secCamMount.add(camHousing);
+
+    // Camera lens
+    const secCamLensGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.1, 16);
+    const secCamLensMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.1,
+      metalness: 1.0
+    });
+    const secCamLens = new THREE.Mesh(secCamLensGeo, secCamLensMat);
+    secCamLens.rotation.x = Math.PI / 2;
+    secCamLens.position.set(0, 0.7, -0.25);
+    secCamMount.add(secCamLens);
+
+    // Status LED on camera
+    const secCamLedGeo = new THREE.SphereGeometry(0.025, 8, 8);
+    const secCamLedMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    const secCamLed = new THREE.Mesh(secCamLedGeo, secCamLedMat);
+    secCamLed.position.set(0.1, 0.8, -0.15);
+    secCamMount.add(secCamLed);
+
+    scene.add(secCamMount);
+
+    // Security camera (Three.js camera for rendering)
+    const securityCamera = new THREE.PerspectiveCamera(50, 640 / 360, 0.1, 50);
+    securityCamera.position.set(7, 2.2, 4);
+
+    const securityCameraRT = new THREE.WebGLRenderTarget(640, 360, {
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+      format: THREE.RGBAFormat
+    });
 
     // Barrels
     const barrelGeo = new THREE.CylinderGeometry(0.4, 0.4, 1, 16);
@@ -758,21 +1105,21 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
     scene.add(cone2);
     collidableObjects.push({ type: 'cone', radius: 0.3, x: 3.5, z: 1.5 });
 
-    // Ceiling lights
+    // Ceiling lights - brighter
     const createCeilingLight = (x: number, z: number) => {
       const lightGroup = new THREE.Group();
       const fixtureGeo = new THREE.BoxGeometry(1.5, 0.1, 0.4);
-      const fixture = new THREE.Mesh(fixtureGeo, new THREE.MeshStandardMaterial({ color: 0x333333 }));
+      const fixture = new THREE.Mesh(fixtureGeo, new THREE.MeshStandardMaterial({ color: 0x444444 }));
       lightGroup.add(fixture);
 
       const bulbGeo = new THREE.PlaneGeometry(1.4, 0.3);
-      const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffffee, transparent: true, opacity: 0.9 });
+      const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1.0 });
       const bulb = new THREE.Mesh(bulbGeo, bulbMat);
       bulb.position.y = -0.06;
       bulb.rotation.x = -Math.PI / 2;
       lightGroup.add(bulb);
 
-      const ceilingPointLight = new THREE.PointLight(0xffffee, 0.3, 10);
+      const ceilingPointLight = new THREE.PointLight(0xffffff, 0.5, 12);
       ceilingPointLight.position.y = -0.2;
       lightGroup.add(ceilingPointLight);
 
@@ -784,6 +1131,7 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
     createCeilingLight(5, -5);
     createCeilingLight(-5, 3);
     createCeilingLight(5, 3);
+    createCeilingLight(0, -1); // Extra center light
 
     // Robot Materials
     const whiteMat = new THREE.MeshStandardMaterial({
@@ -829,18 +1177,18 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
     const robot = new THREE.Group();
     scene.add(robot);
 
-    // Body
-    const bodyGeo = createRoundedBox(1.0, 0.8, 0.7, 0.15, 4);
+    // Body - taller and raised
+    const bodyGeo = createRoundedBox(1.0, 1.0, 0.7, 0.15, 4);
     const body = new THREE.Mesh(bodyGeo, whiteMat);
-    body.position.y = 0.7;
+    body.position.y = 0.8;
     body.castShadow = true;
     body.receiveShadow = true;
     robot.add(body);
 
     // Panel detail
-    const panelGeo = createRoundedBox(0.6, 0.4, 0.02, 0.05, 2);
+    const panelGeo = createRoundedBox(0.6, 0.5, 0.02, 0.05, 2);
     const panel = new THREE.Mesh(panelGeo, lightGrayMat);
-    panel.position.set(0, 0.75, 0.36);
+    panel.position.set(0, 0.85, 0.36);
     robot.add(panel);
 
     // Indicator LEDs
@@ -852,25 +1200,25 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
     ];
     ledPositions.forEach(({ x, color }) => {
       const ledSmall = new THREE.Mesh(ledGeoSmall, new THREE.MeshBasicMaterial({ color }));
-      ledSmall.position.set(x, 0.85, 0.37);
+      ledSmall.position.set(x, 1.0, 0.37);
       robot.add(ledSmall);
     });
 
-    // Neck
-    const neckGeo = new THREE.CylinderGeometry(0.15, 0.2, 0.25, 16);
+    // Neck - raised and longer for more separation
+    const neckGeo = new THREE.CylinderGeometry(0.15, 0.2, 0.35, 16);
     const neck = new THREE.Mesh(neckGeo, silverMat);
-    neck.position.y = 1.25;
+    neck.position.y = 1.5;
     robot.add(neck);
 
     const neckRingGeo = new THREE.TorusGeometry(0.18, 0.03, 8, 24);
     const neckRing = new THREE.Mesh(neckRingGeo, chromeMat);
     neckRing.rotation.x = Math.PI / 2;
-    neckRing.position.y = 1.2;
+    neckRing.position.y = 1.42;
     robot.add(neckRing);
 
-    // Head
+    // Head - raised further from body
     const headGroup = new THREE.Group();
-    headGroup.position.y = 1.55;
+    headGroup.position.y = 1.85;
     robot.add(headGroup);
 
     const headWidth = 1.1;
@@ -882,15 +1230,18 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
     headShell.receiveShadow = true;
     headGroup.add(headShell);
 
-    // LCD Screen
+    // LCD Screen dimensions
     const screenWidth = 0.9;
     const screenHeight = 0.5;
-    const lcdScreenGeo = createRoundedBox(screenWidth, screenHeight, 0.08, 0.08, 3);
-    const lcdScreen = new THREE.Mesh(lcdScreenGeo, darkScreenMat);
-    lcdScreen.position.z = headDepth / 2 - 0.02;
-    headGroup.add(lcdScreen);
 
-    // Face Canvas
+    // Dark LCD background - simple plane, positioned at front of head
+    const lcdBackgroundGeo = new THREE.PlaneGeometry(screenWidth, screenHeight);
+    const lcdBackgroundMat = new THREE.MeshBasicMaterial({ color: 0x0a0a1a });
+    const lcdBackground = new THREE.Mesh(lcdBackgroundGeo, lcdBackgroundMat);
+    lcdBackground.position.z = 0.43; // Just in front of head shell
+    headGroup.add(lcdBackground);
+
+    // Face Canvas for LCD display
     const faceCanvas = document.createElement('canvas');
     faceCanvas.width = 256;
     faceCanvas.height = 160;
@@ -900,16 +1251,58 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
     faceTexture.minFilter = THREE.LinearFilter;
     faceTexture.magFilter = THREE.LinearFilter;
 
+    // Face display - NOT transparent, draws directly on canvas with dark background
     const faceMat = new THREE.MeshBasicMaterial({
-      map: faceTexture,
-      transparent: true
+      map: faceTexture
     });
 
-    const faceDisplayGeo = new THREE.PlaneGeometry(screenWidth - 0.05, screenHeight - 0.05);
+    const faceDisplayGeo = new THREE.PlaneGeometry(screenWidth - 0.02, screenHeight - 0.02);
     const faceDisplay = new THREE.Mesh(faceDisplayGeo, faceMat);
-    faceDisplay.position.z = headDepth / 2 + 0.045;
-    faceDisplay.renderOrder = 1;
+    faceDisplay.position.z = 0.431; // Slightly in front of dark background
     headGroup.add(faceDisplay);
+
+    // Draw initial face immediately
+    const drawInitialFace = () => {
+      const w = faceCanvas.width;
+      const h = faceCanvas.height;
+
+      // Dark background
+      faceCtx.fillStyle = '#0a0a1a';
+      faceCtx.fillRect(0, 0, w, h);
+
+      // Glow settings
+      const color = faceColorRef.current;
+      faceCtx.shadowColor = color;
+      faceCtx.shadowBlur = 20;
+      faceCtx.fillStyle = color;
+      faceCtx.strokeStyle = color;
+      faceCtx.lineWidth = 3;
+      faceCtx.lineCap = 'round';
+
+      // Draw neutral face (eyes and mouth)
+      const eyeY = h * 0.42;
+      const eyeSpacing = w * 0.22;
+
+      // Left eye
+      faceCtx.beginPath();
+      faceCtx.ellipse(w / 2 - eyeSpacing, eyeY, 35, 45, 0, 0, Math.PI * 2);
+      faceCtx.fill();
+
+      // Right eye
+      faceCtx.beginPath();
+      faceCtx.ellipse(w / 2 + eyeSpacing, eyeY, 35, 45, 0, 0, Math.PI * 2);
+      faceCtx.fill();
+
+      // Mouth
+      faceCtx.beginPath();
+      faceCtx.arc(w / 2, h * 0.72, 25, 0.1 * Math.PI, 0.9 * Math.PI, false);
+      faceCtx.stroke();
+
+      faceTexture.needsUpdate = true;
+    };
+
+    // Draw face immediately on creation
+    drawInitialFace();
 
     // LCD Glow - use faceColor from ref for initial color
     const initialGlowColor = new THREE.Color(faceColorRef.current);
@@ -981,7 +1374,7 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
       hubCapL.rotation.y = side === 'left' ? -Math.PI / 2 : Math.PI / 2;
       wheelGroup.add(hubCapL);
 
-      const xPos = side === 'left' ? -0.6 : 0.6;
+      const xPos = side === 'left' ? -0.7 : 0.7;
       wheelGroup.position.set(xPos, 0.32, 0);
       return wheelGroup;
     };
@@ -1020,6 +1413,12 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
     // Dust particles
     const dustParticles: Array<{mesh: THREE.Mesh; velocity: THREE.Vector3; life: number; maxLife: number}> = [];
 
+    // Security camera canvas context
+    const secCamCanvas = document.getElementById('security-cam-canvas') as HTMLCanvasElement;
+    const secCamCtx = secCamCanvas?.getContext('2d');
+    const secCamBuffer = new Uint8Array(640 * 360 * 4);
+    const secCamImageData = secCamCtx?.createImageData(640, 360);
+
     // Store references
     sceneRef.current = {
       scene,
@@ -1043,6 +1442,9 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
       cameraLed,
       robotCamera,
       robotCameraRT,
+      securityCamera,
+      securityCameraRT,
+      secCamMount,
       collidableObjects,
       dustParticles,
       chargingRing
@@ -1054,6 +1456,251 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
     let lastFaceDrawTime = 0;
     const POV_RENDER_INTERVAL = 50;
     const FACE_DRAW_INTERVAL = 33;
+
+    // Local face drawing function (uses local canvas variables directly)
+    const drawFaceLocal = (time: number) => {
+      const w = faceCanvas.width;
+      const h = faceCanvas.height;
+      const currentExpression = expressionRef.current;
+      const currentFaceColor = faceColorRef.current;
+      const displayText = displayTextRef.current;
+
+      // Dark LCD background
+      faceCtx.fillStyle = '#0a0a1a';
+      faceCtx.fillRect(0, 0, w, h);
+
+      // Glow settings
+      faceCtx.shadowColor = currentFaceColor;
+      faceCtx.shadowBlur = 20;
+      faceCtx.fillStyle = currentFaceColor;
+      faceCtx.strokeStyle = currentFaceColor;
+      faceCtx.lineWidth = 3;
+      faceCtx.lineCap = 'round';
+
+      // If there's text to display, show it instead of expression
+      if (displayText) {
+        faceCtx.font = 'bold 28px Inter, sans-serif';
+        faceCtx.textAlign = 'center';
+        faceCtx.textBaseline = 'middle';
+
+        // Word wrap for long text
+        const words = displayText.split(' ');
+        const lines: string[] = [];
+        let currentLine = '';
+
+        words.forEach(word => {
+          const testLine = currentLine + (currentLine ? ' ' : '') + word;
+          if (faceCtx.measureText(testLine).width > w - 40) {
+            lines.push(currentLine);
+            currentLine = word;
+          } else {
+            currentLine = testLine;
+          }
+        });
+        lines.push(currentLine);
+
+        const lineHeight = 32;
+        const startY = h / 2 - (lines.length - 1) * lineHeight / 2;
+
+        lines.forEach((line, i) => {
+          faceCtx.fillText(line, w / 2, startY + i * lineHeight);
+        });
+
+        faceTexture.needsUpdate = true;
+        return;
+      }
+
+      const eyeY = h * 0.42;
+      const eyeSpacing = w * 0.22;
+      const eyeWidth = 35;
+      const eyeHeight = 45;
+
+      const blinkCycle = Math.sin(time * 0.003);
+      const blinkScale = blinkCycle > 0.95 ? 0.1 : 1;
+
+      if (currentExpression === 'neutral') {
+        faceCtx.beginPath();
+        faceCtx.ellipse(w / 2 - eyeSpacing, eyeY, eyeWidth, eyeHeight * blinkScale, 0, 0, Math.PI * 2);
+        faceCtx.fill();
+        faceCtx.beginPath();
+        faceCtx.ellipse(w / 2 + eyeSpacing, eyeY, eyeWidth, eyeHeight * blinkScale, 0, 0, Math.PI * 2);
+        faceCtx.fill();
+        faceCtx.beginPath();
+        faceCtx.arc(w / 2, h * 0.72, 25, 0.1 * Math.PI, 0.9 * Math.PI, false);
+        faceCtx.stroke();
+      } else if (currentExpression === 'happy') {
+        faceCtx.lineWidth = 8;
+        faceCtx.beginPath();
+        faceCtx.arc(w / 2 - eyeSpacing, eyeY + 10, 28, Math.PI, 2 * Math.PI);
+        faceCtx.stroke();
+        faceCtx.beginPath();
+        faceCtx.arc(w / 2 + eyeSpacing, eyeY + 10, 28, Math.PI, 2 * Math.PI);
+        faceCtx.stroke();
+        faceCtx.lineWidth = 4;
+        faceCtx.beginPath();
+        faceCtx.arc(w / 2, h * 0.68, 35, 0.15 * Math.PI, 0.85 * Math.PI);
+        faceCtx.stroke();
+      } else if (currentExpression === 'thinking') {
+        faceCtx.beginPath();
+        faceCtx.ellipse(w / 2 - eyeSpacing, eyeY, eyeWidth, eyeHeight * blinkScale, 0, 0, Math.PI * 2);
+        faceCtx.fill();
+        faceCtx.beginPath();
+        faceCtx.ellipse(w / 2 + eyeSpacing, eyeY - 8, eyeWidth * 0.9, eyeHeight * 0.7, -0.2, 0, Math.PI * 2);
+        faceCtx.fill();
+        faceCtx.beginPath();
+        faceCtx.moveTo(w / 2 - 25, h * 0.72);
+        faceCtx.quadraticCurveTo(w / 2, h * 0.68, w / 2 + 25, h * 0.72);
+        faceCtx.stroke();
+      } else if (currentExpression === 'surprised') {
+        faceCtx.beginPath();
+        faceCtx.arc(w / 2 - eyeSpacing, eyeY, 32, 0, Math.PI * 2);
+        faceCtx.fill();
+        faceCtx.beginPath();
+        faceCtx.arc(w / 2 + eyeSpacing, eyeY, 32, 0, Math.PI * 2);
+        faceCtx.fill();
+        faceCtx.lineWidth = 4;
+        faceCtx.beginPath();
+        faceCtx.arc(w / 2, h * 0.72, 18, 0, Math.PI * 2);
+        faceCtx.stroke();
+      } else if (currentExpression === 'love') {
+        const drawHeart = (cx: number, cy: number, size: number) => {
+          faceCtx.beginPath();
+          faceCtx.moveTo(cx, cy + size * 0.3);
+          faceCtx.bezierCurveTo(cx, cy, cx - size, cy, cx - size, cy + size * 0.5);
+          faceCtx.bezierCurveTo(cx - size, cy + size, cx, cy + size * 1.2, cx, cy + size * 1.5);
+          faceCtx.bezierCurveTo(cx, cy + size * 1.2, cx + size, cy + size, cx + size, cy + size * 0.5);
+          faceCtx.bezierCurveTo(cx + size, cy, cx, cy, cx, cy + size * 0.3);
+          faceCtx.fill();
+        };
+        drawHeart(w / 2 - eyeSpacing, eyeY - 25, 22);
+        drawHeart(w / 2 + eyeSpacing, eyeY - 25, 22);
+        faceCtx.beginPath();
+        faceCtx.arc(w / 2, h * 0.7, 30, 0.1 * Math.PI, 0.9 * Math.PI);
+        faceCtx.stroke();
+      } else if (currentExpression === 'loading') {
+        const dotCount = 8;
+        const radius = 35;
+        for (let i = 0; i < dotCount; i++) {
+          const angle = (i / dotCount) * Math.PI * 2 + time * 0.005;
+          const x = w / 2 + Math.cos(angle) * radius;
+          const y = h / 2 + Math.sin(angle) * radius;
+          const alpha = ((i / dotCount) + (time * 0.002)) % 1;
+          faceCtx.globalAlpha = alpha;
+          faceCtx.beginPath();
+          faceCtx.arc(x, y, 8, 0, Math.PI * 2);
+          faceCtx.fill();
+        }
+        faceCtx.globalAlpha = 1;
+      } else if (currentExpression === 'sad') {
+        faceCtx.beginPath();
+        faceCtx.ellipse(w / 2 - eyeSpacing, eyeY + 8, eyeWidth * 0.9, eyeHeight * 0.6 * blinkScale, 0.2, 0, Math.PI * 2);
+        faceCtx.fill();
+        faceCtx.beginPath();
+        faceCtx.ellipse(w / 2 + eyeSpacing, eyeY + 8, eyeWidth * 0.9, eyeHeight * 0.6 * blinkScale, -0.2, 0, Math.PI * 2);
+        faceCtx.fill();
+        faceCtx.lineWidth = 4;
+        faceCtx.beginPath();
+        faceCtx.arc(w / 2, h * 0.82, 25, 1.1 * Math.PI, 1.9 * Math.PI);
+        faceCtx.stroke();
+      } else if (currentExpression === 'angry') {
+        faceCtx.save();
+        faceCtx.translate(w / 2 - eyeSpacing, eyeY);
+        faceCtx.rotate(-0.3);
+        faceCtx.fillRect(-eyeWidth, -eyeHeight * 0.3 * blinkScale, eyeWidth * 2, eyeHeight * 0.6 * blinkScale);
+        faceCtx.restore();
+        faceCtx.save();
+        faceCtx.translate(w / 2 + eyeSpacing, eyeY);
+        faceCtx.rotate(0.3);
+        faceCtx.fillRect(-eyeWidth, -eyeHeight * 0.3 * blinkScale, eyeWidth * 2, eyeHeight * 0.6 * blinkScale);
+        faceCtx.restore();
+        faceCtx.lineWidth = 5;
+        faceCtx.beginPath();
+        faceCtx.moveTo(w / 2 - 30, h * 0.72);
+        faceCtx.lineTo(w / 2 + 30, h * 0.72);
+        faceCtx.stroke();
+      } else if (currentExpression === 'wink') {
+        faceCtx.beginPath();
+        faceCtx.ellipse(w / 2 - eyeSpacing, eyeY, eyeWidth, eyeHeight * blinkScale, 0, 0, Math.PI * 2);
+        faceCtx.fill();
+        faceCtx.lineWidth = 6;
+        faceCtx.beginPath();
+        faceCtx.arc(w / 2 + eyeSpacing, eyeY, 25, 0, Math.PI);
+        faceCtx.stroke();
+        faceCtx.lineWidth = 4;
+        faceCtx.beginPath();
+        faceCtx.arc(w / 2 + 10, h * 0.70, 30, 0.1 * Math.PI, 0.9 * Math.PI);
+        faceCtx.stroke();
+      } else if (currentExpression === 'excited') {
+        faceCtx.beginPath();
+        faceCtx.arc(w / 2 - eyeSpacing, eyeY, 30, 0, Math.PI * 2);
+        faceCtx.fill();
+        faceCtx.beginPath();
+        faceCtx.arc(w / 2 + eyeSpacing, eyeY, 30, 0, Math.PI * 2);
+        faceCtx.fill();
+        faceCtx.fillStyle = '#000';
+        const drawStar = (cx: number, cy: number, size: number) => {
+          faceCtx.beginPath();
+          for (let i = 0; i < 4; i++) {
+            const angle = (i / 4) * Math.PI * 2 - Math.PI / 2;
+            const x = cx + Math.cos(angle) * size;
+            const y = cy + Math.sin(angle) * size;
+            if (i === 0) faceCtx.moveTo(x, y);
+            else faceCtx.lineTo(x, y);
+            const midAngle = angle + Math.PI / 4;
+            const mx = cx + Math.cos(midAngle) * size * 0.4;
+            const my = cy + Math.sin(midAngle) * size * 0.4;
+            faceCtx.lineTo(mx, my);
+          }
+          faceCtx.closePath();
+          faceCtx.fill();
+        };
+        drawStar(w / 2 - eyeSpacing - 8, eyeY - 8, 8);
+        drawStar(w / 2 + eyeSpacing - 8, eyeY - 8, 8);
+        faceCtx.fillStyle = currentFaceColor;
+        faceCtx.lineWidth = 4;
+        faceCtx.beginPath();
+        faceCtx.arc(w / 2, h * 0.68, 35, 0.1 * Math.PI, 0.9 * Math.PI);
+        faceCtx.stroke();
+        faceCtx.beginPath();
+        faceCtx.moveTo(w / 2 - 20, h * 0.72);
+        faceCtx.lineTo(w / 2 + 20, h * 0.72);
+        faceCtx.stroke();
+      } else if (currentExpression === 'sleepy') {
+        faceCtx.lineWidth = 6;
+        faceCtx.beginPath();
+        faceCtx.arc(w / 2 - eyeSpacing, eyeY + 5, 25, 0.3 * Math.PI, 0.7 * Math.PI);
+        faceCtx.stroke();
+        faceCtx.beginPath();
+        faceCtx.arc(w / 2 + eyeSpacing, eyeY + 5, 25, 0.3 * Math.PI, 0.7 * Math.PI);
+        faceCtx.stroke();
+        faceCtx.beginPath();
+        faceCtx.ellipse(w / 2, h * 0.73, 15, 20, 0, 0, Math.PI * 2);
+        faceCtx.stroke();
+        faceCtx.font = 'bold 18px Inter, sans-serif';
+        faceCtx.fillText('z', w * 0.75, h * 0.35);
+        faceCtx.font = 'bold 14px Inter, sans-serif';
+        faceCtx.fillText('z', w * 0.80, h * 0.28);
+        faceCtx.font = 'bold 10px Inter, sans-serif';
+        faceCtx.fillText('z', w * 0.84, h * 0.22);
+      } else if (currentExpression === 'confused') {
+        faceCtx.beginPath();
+        faceCtx.ellipse(w / 2 - eyeSpacing, eyeY, eyeWidth, eyeHeight * blinkScale, 0, 0, Math.PI * 2);
+        faceCtx.fill();
+        faceCtx.beginPath();
+        faceCtx.ellipse(w / 2 + eyeSpacing, eyeY - 5, eyeWidth * 0.8, eyeHeight * 0.7 * blinkScale, 0, 0, Math.PI * 2);
+        faceCtx.fill();
+        faceCtx.font = 'bold 24px Inter, sans-serif';
+        faceCtx.fillText('?', w / 2 + eyeSpacing + 15, eyeY - 25);
+        faceCtx.lineWidth = 4;
+        faceCtx.beginPath();
+        faceCtx.moveTo(w / 2 - 30, h * 0.72);
+        faceCtx.quadraticCurveTo(w / 2 - 10, h * 0.68, w / 2, h * 0.72);
+        faceCtx.quadraticCurveTo(w / 2 + 10, h * 0.76, w / 2 + 30, h * 0.72);
+        faceCtx.stroke();
+      }
+
+      faceTexture.needsUpdate = true;
+    };
 
     // Update movement
     const updateMovement = (delta: number) => {
@@ -1149,11 +1796,11 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
 
       body.rotation.x = state.bodyTilt;
       body.rotation.z = state.bodyLean;
-      body.position.y = 0.7 + state.suspensionOffset;
+      body.position.y = 0.8 + state.suspensionOffset;
 
       neck.rotation.x = state.bodyTilt * 0.5;
-      neck.position.y = 1.25 + state.suspensionOffset * 0.8;
-      neckRing.position.y = 1.2 + state.suspensionOffset * 0.8;
+      neck.position.y = 1.5 + state.suspensionOffset * 0.8;
+      neckRing.position.y = 1.42 + state.suspensionOffset * 0.8;
 
       leftWheel.rotation.x = state.wheelRotation;
       rightWheel.rotation.x = state.wheelRotation;
@@ -1211,7 +1858,7 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
 
       idle.breathPhase += delta * 1.5;
       const breathOffset = Math.sin(idle.breathPhase) * 0.003;
-      body.position.y = 0.7 + state.suspensionOffset + breathOffset;
+      body.position.y = 0.8 + state.suspensionOffset + breathOffset;
 
       idle.attentionPhase += delta * 0.8;
       const attentionTilt = Math.sin(idle.attentionPhase) * 0.01;
@@ -1341,18 +1988,81 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
       }
       povCtx.putImageData(povImageData, 0, 0);
 
-      // Add scanline effect overlay
-      povCtx.fillStyle = 'rgba(0, 0, 0, 0.03)';
-      for (let y = 0; y < 360; y += 2) {
+      // Brighten the POV image
+      povCtx.globalCompositeOperation = 'lighter';
+      povCtx.fillStyle = 'rgba(40, 40, 50, 0.3)';
+      povCtx.fillRect(0, 0, 640, 360);
+      povCtx.globalCompositeOperation = 'source-over';
+
+      // Very subtle scanline effect
+      povCtx.fillStyle = 'rgba(0, 0, 0, 0.015)';
+      for (let y = 0; y < 360; y += 3) {
         povCtx.fillRect(0, y, 640, 1);
       }
 
-      // Add vignette corners
-      const gradient = povCtx.createRadialGradient(320, 180, 100, 320, 180, 400);
+      // Very light vignette
+      const gradient = povCtx.createRadialGradient(320, 180, 200, 320, 180, 400);
       gradient.addColorStop(0, 'rgba(0,0,0,0)');
-      gradient.addColorStop(1, 'rgba(0,0,0,0.4)');
+      gradient.addColorStop(1, 'rgba(0,0,0,0.15)');
       povCtx.fillStyle = gradient;
       povCtx.fillRect(0, 0, 640, 360);
+    };
+
+    // Render security camera (follows robot)
+    const renderSecurityCamera = () => {
+      if (!secCamCtx || !secCamImageData) return;
+
+      // Make security camera look at robot
+      const robotWorldPos = new THREE.Vector3();
+      robot.getWorldPosition(robotWorldPos);
+
+      // Point the camera mount towards robot
+      const dx = robotWorldPos.x - secCamMount.position.x;
+      const dz = robotWorldPos.z - secCamMount.position.z;
+      secCamMount.rotation.y = Math.atan2(dx, dz);
+
+      // Update security camera to look at robot (from slightly above the box)
+      securityCamera.position.copy(secCamMount.position);
+      securityCamera.position.y += 0.7; // Camera is on top of mount
+      securityCamera.lookAt(robotWorldPos.x, robotWorldPos.y + 0.8, robotWorldPos.z);
+
+      renderer.setRenderTarget(securityCameraRT);
+      renderer.render(scene, securityCamera);
+      renderer.setRenderTarget(null);
+
+      renderer.readRenderTargetPixels(securityCameraRT, 0, 0, 640, 360, secCamBuffer);
+
+      // Copy to ImageData (flip Y since WebGL is bottom-up)
+      for (let y = 0; y < 360; y++) {
+        for (let x = 0; x < 640; x++) {
+          const srcIdx = ((359 - y) * 640 + x) * 4;
+          const dstIdx = (y * 640 + x) * 4;
+          secCamImageData.data[dstIdx] = secCamBuffer[srcIdx];
+          secCamImageData.data[dstIdx + 1] = secCamBuffer[srcIdx + 1];
+          secCamImageData.data[dstIdx + 2] = secCamBuffer[srcIdx + 2];
+          secCamImageData.data[dstIdx + 3] = secCamBuffer[srcIdx + 3];
+        }
+      }
+      secCamCtx.putImageData(secCamImageData, 0, 0);
+
+      // Slight yellow/amber tint for security camera look
+      secCamCtx.globalCompositeOperation = 'multiply';
+      secCamCtx.fillStyle = 'rgba(255, 250, 230, 0.95)';
+      secCamCtx.fillRect(0, 0, 640, 360);
+      secCamCtx.globalCompositeOperation = 'source-over';
+
+      // Subtle scanlines
+      secCamCtx.fillStyle = 'rgba(0, 0, 0, 0.02)';
+      for (let y = 0; y < 360; y += 2) {
+        secCamCtx.fillRect(0, y, 640, 1);
+      }
+
+      // Vignette
+      const secGradient = secCamCtx.createRadialGradient(320, 180, 180, 320, 180, 380);
+      secGradient.addColorStop(0, 'rgba(0,0,0,0)');
+      secGradient.addColorStop(1, 'rgba(0,0,0,0.25)');
+      secCamCtx.fillStyle = secGradient;
+      secCamCtx.fillRect(0, 0, 640, 360);
     };
 
     // Animation loop
@@ -1381,13 +2091,14 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
 
       // Draw face at reduced rate
       if (currentTime - lastFaceDrawTime > FACE_DRAW_INTERVAL) {
-        drawFace(currentTime);
+        drawFaceLocal(currentTime);
         lastFaceDrawTime = currentTime;
       }
 
       // Render POV at reduced rate
       if (currentTime - lastPovRenderTime > POV_RENDER_INTERVAL) {
         renderRobotPOV();
+        renderSecurityCamera();
         lastPovRenderTime = currentTime;
       }
 
@@ -1477,4 +2188,6 @@ export default function RobotScene({ expression, faceColor, bodyColor, onSpeedCh
   return (
     <div ref={containerRef} className="w-full h-full" />
   );
-}
+});
+
+export default RobotScene;

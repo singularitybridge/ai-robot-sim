@@ -2,9 +2,9 @@ module.exports = {
   apps: [
     {
       name: 'ai-robot-sim',
-      script: 'npm',
-      args: 'run dev',
-      cwd: '/Users/avi/dev/avio/sb-projects/ai-robot-sim',
+      script: 'node_modules/next/dist/bin/next',
+      args: 'dev -p 4091',
+      cwd: 'C:/Users/user/dev/ai-robot-sim',
       env: {
         PORT: 4091,
         NODE_ENV: 'development'
