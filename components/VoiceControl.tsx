@@ -107,7 +107,7 @@ export default function VoiceControl({ onCommand, onStatusChange }: VoiceControl
     const agentId = process.env.NEXT_PUBLIC_ELEVENLABS_ROBOT_AGENT_ID;
 
     if (!agentId) {
-      console.error('ElevenLabs Robot Agent ID not configured');
+      console.warn('ElevenLabs Robot Agent ID not configured - voice control disabled');
       onStatusChange?.('error');
       return;
     }
@@ -118,7 +118,7 @@ export default function VoiceControl({ onCommand, onStatusChange }: VoiceControl
         agentId: agentId,
       });
     } catch (error) {
-      console.error('Failed to start voice session:', error);
+      console.warn('Voice session error:', error);
       setIsConnecting(false);
       onStatusChange?.('error');
     }

@@ -65,6 +65,27 @@ export default function Home() {
   );
   const [voiceStatus, setVoiceStatus] = useState<'disconnected' | 'connected' | 'error'>('disconnected');
 
+  // Auto-update LED color based on expression
+  const expressionColors: Record<string, string> = {
+    angry: '#ff4444',      // Red
+    sad: '#4488ff',        // Blue
+    happy: '#00ff88',      // Green
+    love: '#ff66b2',       // Pink
+    excited: '#ffdd00',    // Yellow
+    thinking: '#aa66ff',   // Purple
+    surprised: '#ff8800',  // Orange
+    sleepy: '#6688aa',     // Dim blue
+    confused: '#ff9944',   // Orange
+    wink: '#ff88cc',       // Pink
+    loading: '#00ffff',    // Cyan
+    neutral: '#00ffff',    // Cyan
+  };
+
+  useEffect(() => {
+    const color = expressionColors[expression] || '#00ffff';
+    setFaceColor(color);
+  }, [expression]);
+
   const robotRef = useRef<RobotCommands>(null);
   const commandTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -307,7 +328,7 @@ export default function Home() {
       </div>
 
       {/* Bottom Controls */}
-      <div className="fixed bottom-0 left-[280px] right-[320px] h-[100px] bg-[rgba(20,20,30,0.95)] backdrop-blur-lg border-t border-white/10 flex items-center justify-center gap-6 px-6">
+      <div className="fixed bottom-0 left-[280px] right-[320px] h-[100px] bg-[rgba(20,20,30,0.95)] backdrop-blur-lg border-t border-white/10 flex items-center justify-center gap-4 px-4">
         {/* Movement Pad */}
         <div className="flex flex-col items-center">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-white/50 mb-1">Move</div>
@@ -315,28 +336,28 @@ export default function Home() {
             <div />
             <button
               {...setupButtonHold('forward')}
-              className="w-9 h-9 border-none rounded-md bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-base cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
+              className="w-7 h-7 border-none rounded bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-sm cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
             >
               ↑
             </button>
             <div />
             <button
               {...setupButtonHold('turnLeft')}
-              className="w-9 h-9 border-none rounded-md bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-base cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
+              className="w-7 h-7 border-none rounded bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-sm cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
             >
               ←
             </button>
             <div />
             <button
               {...setupButtonHold('turnRight')}
-              className="w-9 h-9 border-none rounded-md bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-base cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
+              className="w-7 h-7 border-none rounded bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-sm cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
             >
               →
             </button>
             <div />
             <button
               {...setupButtonHold('backward')}
-              className="w-9 h-9 border-none rounded-md bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-base cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
+              className="w-7 h-7 border-none rounded bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-sm cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
             >
               ↓
             </button>
@@ -350,20 +371,20 @@ export default function Home() {
           <div className="flex gap-1">
             <button
               {...setupButtonHold('headLeft')}
-              className="w-9 h-9 border-none rounded-md bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-base cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
+              className="w-7 h-7 border-none rounded bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-sm cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
             >
               ↺
             </button>
             <button
               {...setupButtonHold('headRight')}
-              className="w-9 h-9 border-none rounded-md bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-base cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
+              className="w-7 h-7 border-none rounded bg-[rgba(74,158,255,0.2)] text-[#4a9eff] text-sm cursor-pointer flex items-center justify-center hover:bg-[rgba(74,158,255,0.3)] active:bg-[rgba(74,158,255,0.5)] active:scale-95 transition-all"
             >
               ↻
             </button>
           </div>
         </div>
 
-        <div className="w-px h-16 bg-white/10" />
+        <div className="w-px h-12 bg-white/10" />
 
         {/* Expression Buttons */}
         <div className="flex flex-col items-center">
@@ -374,7 +395,7 @@ export default function Home() {
                 key={expr.id}
                 onClick={() => setExpression(expr.id)}
                 title={expr.title}
-                className={`w-8 h-8 border-none rounded-md text-base cursor-pointer transition-all hover:bg-white/20 hover:-translate-y-0.5 ${
+                className={`w-7 h-7 border-none rounded text-sm cursor-pointer transition-all hover:bg-white/20 hover:-translate-y-0.5 ${
                   expression === expr.id
                     ? 'bg-[rgba(74,158,255,0.3)] shadow-[0_0_12px_rgba(74,158,255,0.4)]'
                     : 'bg-white/10'
@@ -386,7 +407,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="w-px h-16 bg-white/10" />
+        <div className="w-px h-12 bg-white/10" />
 
         {/* LCD Color */}
         <div className="flex flex-col items-center">
@@ -397,7 +418,7 @@ export default function Home() {
                 key={color.id}
                 onClick={() => setFaceColor(color.id)}
                 style={{ backgroundColor: color.id }}
-                className={`w-6 h-6 rounded-full cursor-pointer border-2 transition-all hover:scale-110 ${
+                className={`w-5 h-5 rounded-full cursor-pointer border-2 transition-all hover:scale-110 ${
                   faceColor === color.id
                     ? 'border-white shadow-[0_0_8px_currentColor]'
                     : 'border-transparent'
@@ -417,7 +438,7 @@ export default function Home() {
                 onClick={() => setBodyColor(color.id)}
                 title={color.title}
                 style={{ backgroundColor: color.id }}
-                className={`w-6 h-6 rounded cursor-pointer border-2 transition-all hover:scale-110 ${
+                className={`w-5 h-5 rounded cursor-pointer border-2 transition-all hover:scale-110 ${
                   bodyColor === color.id
                     ? 'border-white shadow-[0_0_8px_rgba(255,255,255,0.5)]'
                     : 'border-white/20 hover:border-white/50'
@@ -427,7 +448,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="w-px h-16 bg-white/10" />
+        <div className="w-px h-12 bg-white/10" />
 
         {/* Speed Indicator */}
         <div className="flex flex-col items-center min-w-[80px]">
