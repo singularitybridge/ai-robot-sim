@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 export interface RobotCommands {
   doWave: () => Promise<void>;
@@ -10,6 +11,12 @@ export interface RobotCommands {
   doTakePhoto: () => Promise<void>;
   doSayHello: () => Promise<void>;
   showTextOnFace: (text: string, duration?: number) => void;
+  // Movement commands for AI control
+  moveForward: (duration?: number) => Promise<void>;
+  moveBackward: (duration?: number) => Promise<void>;
+  turnLeft: (duration?: number) => Promise<void>;
+  turnRight: (duration?: number) => Promise<void>;
+  stop: () => void;
 }
 
 interface RobotSceneProps {
@@ -306,14 +313,65 @@ const RobotScene = forwardRef<RobotCommands, RobotSceneProps>(function RobotScen
     isAnimatingRef.current = false;
   }, [onExpressionChange, onResponseUpdate, showTextOnFace]);
 
+  // Movement command: Move forward for specified duration (ms)
+  const moveForward = useCallback(async (duration: number = 500) => {
+    const actions = actionsRef.current;
+    actions.forward = true;
+    onResponseUpdate?.(`🚗 <span style="color:#00ffff">Moving forward</span> for ${duration}ms`);
+    await new Promise(r => setTimeout(r, duration));
+    actions.forward = false;
+  }, [onResponseUpdate]);
+
+  // Movement command: Move backward for specified duration (ms)
+  const moveBackward = useCallback(async (duration: number = 500) => {
+    const actions = actionsRef.current;
+    actions.backward = true;
+    onResponseUpdate?.(`🚗 <span style="color:#00ffff">Moving backward</span> for ${duration}ms`);
+    await new Promise(r => setTimeout(r, duration));
+    actions.backward = false;
+  }, [onResponseUpdate]);
+
+  // Movement command: Turn left for specified duration (ms)
+  const turnLeft = useCallback(async (duration: number = 300) => {
+    const actions = actionsRef.current;
+    actions.turnLeft = true;
+    onResponseUpdate?.(`↩️ <span style="color:#00ffff">Turning left</span> for ${duration}ms`);
+    await new Promise(r => setTimeout(r, duration));
+    actions.turnLeft = false;
+  }, [onResponseUpdate]);
+
+  // Movement command: Turn right for specified duration (ms)
+  const turnRight = useCallback(async (duration: number = 300) => {
+    const actions = actionsRef.current;
+    actions.turnRight = true;
+    onResponseUpdate?.(`↪️ <span style="color:#00ffff">Turning right</span> for ${duration}ms`);
+    await new Promise(r => setTimeout(r, duration));
+    actions.turnRight = false;
+  }, [onResponseUpdate]);
+
+  // Movement command: Stop all movement
+  const stop = useCallback(() => {
+    const actions = actionsRef.current;
+    actions.forward = false;
+    actions.backward = false;
+    actions.turnLeft = false;
+    actions.turnRight = false;
+    onResponseUpdate?.(`🛑 <span style="color:#ffdd00">Stopped</span>`);
+  }, [onResponseUpdate]);
+
   // Expose commands via ref
   useImperativeHandle(ref, () => ({
     doWave,
     doSpin,
     doTakePhoto,
     doSayHello,
-    showTextOnFace
-  }), [doWave, doSpin, doTakePhoto, doSayHello, showTextOnFace]);
+    showTextOnFace,
+    moveForward,
+    moveBackward,
+    turnLeft,
+    turnRight,
+    stop
+  }), [doWave, doSpin, doTakePhoto, doSayHello, showTextOnFace, moveForward, moveBackward, turnLeft, turnRight, stop]);
 
   // Helper function to create rounded box
   const createRoundedBox = useCallback((width: number, height: number, depth: number, radius: number, segments: number) => {
@@ -1001,6 +1059,53 @@ const RobotScene = forwardRef<RobotCommands, RobotSceneProps>(function RobotScen
     securityBox.receiveShadow = true;
     scene.add(securityBox);
     collidableObjects.push({ mesh: securityBox, type: 'box', radius: 0.8, x: 7, z: 4 });
+
+    // Load cute cat model
+    const gltfLoader = new GLTFLoader();
+    gltfLoader.load('/models/cat.glb', (gltf) => {
+      const cat = gltf.scene;
+      const catScale = 1.2;
+      cat.scale.set(catScale, catScale, catScale);
+
+      // Calculate bounding box to find the correct Y offset
+      const box = new THREE.Box3().setFromObject(cat);
+      const yOffset = -box.min.y * catScale; // Adjust for scale
+      cat.position.set(3, yOffset, 3);
+      cat.rotation.y = Math.PI; // Face the robot
+      cat.castShadow = true;
+      cat.receiveShadow = true;
+      cat.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+      scene.add(cat);
+      collidableObjects.push({ type: 'cat', radius: 0.5, x: 3, z: 3 });
+    });
+
+    // Load tricycle model
+    gltfLoader.load('/models/tricycle.glb', (gltf) => {
+      const tricycle = gltf.scene;
+      const tricycleScale = 2.0;
+      tricycle.scale.set(tricycleScale, tricycleScale, tricycleScale);
+
+      // Calculate bounding box to find the correct Y offset
+      const box = new THREE.Box3().setFromObject(tricycle);
+      const yOffset = -box.min.y * tricycleScale; // Adjust for scale
+      tricycle.position.set(-4, yOffset, 4);
+      tricycle.rotation.y = Math.PI; // Face the robot
+      tricycle.castShadow = true;
+      tricycle.receiveShadow = true;
+      tricycle.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+      scene.add(tricycle);
+      collidableObjects.push({ type: 'tricycle', radius: 0.8, x: -4, z: 4 });
+    });
 
     // Security camera mount on yellow box
     const secCamMount = new THREE.Group();
